@@ -25,7 +25,7 @@ public partial class InputDialog : Window
         _validate = validate;
         TitleText.Text = title;
         MessageText.Text = message;
-        MessageText.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
+        MessageScroll.Visibility = string.IsNullOrEmpty(message) ? Visibility.Collapsed : Visibility.Visible;
         PrimaryButton.Content = primaryLabel;
         SecondaryButton.Content = secondaryLabel;
         InputBox.Text = initial;
@@ -51,13 +51,15 @@ public partial class InputDialog : Window
         string initial = "",
         string primaryLabel = "Create",
         string secondaryLabel = "Cancel",
-        Func<string, string?>? validate = null)
+        Func<string, string?>? validate = null,
+        double width = MessageDialog.DefaultWidth)
     {
         var dialog = new InputDialog(title, message, initial, primaryLabel, secondaryLabel, validate);
         if (owner is not null)
         {
             dialog.Owner = owner;
         }
+        DialogSizing.Apply(dialog, width);
         return dialog.ShowDialog() == true ? dialog.InputBox.Text.Trim() : null;
     }
 

@@ -77,6 +77,8 @@ public partial class InboxWindow : Window
         {
             Owner = owner,
         };
+        // The font-scaled size in the ctor can still exceed a small screen.
+        DialogSizing.ClampToScreen(win);
         win.LoadMessages();
         if (win._messages.Count == 0)
         {

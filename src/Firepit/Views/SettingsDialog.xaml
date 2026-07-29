@@ -106,13 +106,26 @@
         <!-- Body -->
         <Grid Grid.Row="1" Margin="20,16,20,16">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
+                <!-- Settings scroll; the action row underneath stays put, so the
+                     window can be capped to the work area (see DialogSizing)
+                     without Save/Cancel ever leaving the screen. -->
+                <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+
+            <ScrollViewer Grid.Row="0"
+                          Padding="0,0,4,0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False">
+              <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
             <TextBlock Grid.Row="0"
                        Text="Projects root"
@@ -190,8 +203,10 @@
                        FontSize="{DynamicResource SmallFontSize}"
                        Margin="0,18,0,0"
                        TextWrapping="Wrap" />
+              </Grid>
+            </ScrollViewer>
 
-            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
                 <Button x:Name="OpenJsonButton"
                         Content="Open settings.json"
                         Style="{StaticResource DialogButtonBase}"

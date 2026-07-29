@@ -137,7 +137,8 @@ public partial class MainWindow
             message: message,
             primaryLabel: primary,
             secondaryLabel: "Ignore this version",
-            width: 520);
+            // Release notes are the longest body we show — give them room.
+            width: 640);
 
         switch (choice)
         {

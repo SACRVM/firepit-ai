@@ -27,7 +27,9 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition x:Name="CaptionRow" Height="32" />
-            <RowDefinition Height="Auto" />
+            <!-- Star + ScrollViewer below: the window is capped to the work area
+                 (see DialogSizing), so the body scrolls rather than overflowing. -->
+            <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
         <!-- Caption -->
@@ -53,8 +55,11 @@
         </Grid>
 
         <!-- Body -->
-        <StackPanel Grid.Row="1"
-                    HorizontalAlignment="Center"
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Focusable="False">
+        <StackPanel HorizontalAlignment="Center"
                     Margin="32,28,32,28">
 
             <!-- Larger flame mark -->
@@ -139,6 +144,7 @@
                 </Button.Style>
             </Button>
         </StackPanel>
+        </ScrollViewer>
     </Grid>
     </Border>
 </Window>

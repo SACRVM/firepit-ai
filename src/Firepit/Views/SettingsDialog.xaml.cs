@@ -24,6 +24,13 @@ public partial class SettingsDialog : Window
         SourceInitialized += (_, _) => WindowDarkMode.EnableForWindow(this);
     }
 
+    /// <summary>
+    /// Design width in DIPs. Callers hand this to <see cref="DialogSizing"/>
+    /// once <see cref="Window.Owner"/> is set — sizing has to happen before the
+    /// window is shown, so the dialog can't do it for itself.
+    /// </summary>
+    internal const double DesignWidth = 540;
+
     public FirepitSettings? Result { get; private set; }
 
     private void ApplyChromeMetricsFromResources()

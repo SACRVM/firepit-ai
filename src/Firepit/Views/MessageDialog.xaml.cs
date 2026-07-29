@@ -17,6 +17,12 @@ public enum MessageChoice
 
 public partial class MessageDialog : Window
 {
+    /// <summary>
+    /// Design width in DIPs — scaled by the UI font setting and capped to the
+    /// screen by <see cref="DialogSizing"/>.
+    /// </summary>
+    public const double DefaultWidth = 560;
+
     private MessageChoice _choice = MessageChoice.Dismissed;
 
     private MessageDialog(string title, string message, string primaryLabel, string? secondaryLabel)
@@ -48,13 +54,15 @@ public partial class MessageDialog : Window
         string title,
         string message,
         string primaryLabel = "OK",
-        string? secondaryLabel = null)
+        string? secondaryLabel = null,
+        double width = DefaultWidth)
     {
         var dialog = new MessageDialog(title, message, primaryLabel, secondaryLabel);
         if (owner is not null)
         {
             dialog.Owner = owner;
         }
+        DialogSizing.Apply(dialog, width);
         return dialog.ShowDialog() == true;
     }
 
@@ -69,10 +77,9 @@ public partial class MessageDialog : Window
         string message,
         string primaryLabel,
         string secondaryLabel,
-        double width = 420)
+        double width = DefaultWidth)
     {
         var dialog = new MessageDialog(title, message, primaryLabel, secondaryLabel);
-        dialog.Width = width;
         // Esc must mean "later" (Dismissed), not the secondary action — so the
         // secondary button must not double as the cancel button here.
         dialog.SecondaryButton.IsCancel = false;
@@ -80,6 +87,7 @@ public partial class MessageDialog : Window
         {
             dialog.Owner = owner;
         }
+        DialogSizing.Apply(dialog, width);
         dialog.ShowDialog();
         return dialog._choice;
     }

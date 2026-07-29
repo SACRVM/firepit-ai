@@ -19,6 +19,13 @@ public partial class AboutDialog : Window
         SourceInitialized += (_, _) => WindowDarkMode.EnableForWindow(this);
     }
 
+    /// <summary>
+    /// Design width in DIPs. Callers hand this to <see cref="DialogSizing"/>
+    /// once <see cref="Window.Owner"/> is set — sizing has to happen before the
+    /// window is shown, so the dialog can't do it for itself.
+    /// </summary>
+    internal const double DesignWidth = 380;
+
     private static string ResolveVersion()
     {
         // <Version> in Firepit.csproj flows into AssemblyInformationalVersion at build time.

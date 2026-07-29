@@ -1566,6 +1566,7 @@ public partial class MainWindow : Window
     private void OnAboutClick(object sender, RoutedEventArgs e)
     {
         var about = new AboutDialog { Owner = this };
+        Views.DialogSizing.Apply(about, AboutDialog.DesignWidth);
         about.ShowDialog();
     }
 
@@ -1573,6 +1574,7 @@ public partial class MainWindow : Window
     {
         var previousFontSize = (_settings.Ui ?? UiSettings.Defaults).ResolvedFontSize;
         var dialog = new SettingsDialog(_settingsStore) { Owner = this };
+        Views.DialogSizing.Apply(dialog, SettingsDialog.DesignWidth);
         if (dialog.ShowDialog() == true && dialog.Result is { } updated)
         {
             _settings = updated;

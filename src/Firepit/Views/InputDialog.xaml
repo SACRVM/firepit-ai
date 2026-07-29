@@ -4,7 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Firepit"
         SizeToContent="Height"
-        Width="420"
+        Width="560"
         Background="#1A1612"
         Icon="/firepit.ico"
         BorderBrush="#332B22"
@@ -97,7 +97,10 @@
         <Grid Grid.Row="1" Margin="20,18,20,16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
+                <!-- Star, not Auto: the window is capped to the work area (see
+                     DialogSizing), so a long message scrolls here instead of
+                     pushing the input box and buttons off-screen. -->
+                <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -111,13 +114,19 @@
                        FontWeight="SemiBold"
                        TextWrapping="Wrap" />
 
-            <TextBlock x:Name="MessageText"
-                       Grid.Row="1"
-                       Foreground="#A89F92"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource BaseFontSize}"
-                       TextWrapping="Wrap"
-                       Margin="0,10,0,0" />
+            <ScrollViewer x:Name="MessageScroll"
+                          Grid.Row="1"
+                          Margin="0,10,0,0"
+                          Padding="0,0,4,0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Focusable="False">
+                <TextBlock x:Name="MessageText"
+                           Foreground="#A89F92"
+                           FontFamily="Cascadia Code, Consolas, Courier New"
+                           FontSize="{DynamicResource BaseFontSize}"
+                           TextWrapping="Wrap" />
+            </ScrollViewer>
 
             <Border Grid.Row="2"
                     Margin="0,12,0,0"
