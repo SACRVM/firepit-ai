@@ -12,7 +12,7 @@
 ;   - bin/installer/FirepitSetup-<version>-win-x64.exe
 
 #ifndef AppVersion
-  #define AppVersion "0.8.1"
+  #define AppVersion "0.8.2"
 #endif
 
 [Setup]
