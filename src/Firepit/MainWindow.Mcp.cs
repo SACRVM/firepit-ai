@@ -256,6 +256,32 @@ public partial class MainWindow : IMcpBackend
             return new ToolCallResult(true, $"Reloaded {projectName} (quick-links applied; banner if restart needed)");
         });
 
+    /// <summary>
+    /// Push a just-written <c>.firepit/config.json</c> into the project's open
+    /// tab. Firepit's own writes must not route their UI refresh through the
+    /// file system: <see cref="Firepit.ProjectConfig.FileSystemProjectConfigWatcher"/>
+    /// exists for edits made *outside* Firepit (VS Code, Notepad, an agent's
+    /// Write tool) and is gated behind <c>tabs.autoReloadOnConfigChange</c> —
+    /// a setting about foreign edits that has no business deciding whether an
+    /// MCP call becomes visible. Waiting for a debounced FS event to re-read
+    /// and re-parse data we are already holding is pure detour; when the flag
+    /// is off it never arrives at all and the tool reports a success the user
+    /// never sees.
+    /// </summary>
+    private void ApplyConfigToOpenTab(string projectPath, Firepit.Core.ProjectConfig.ProjectConfig config)
+    {
+        if (!_openTabs.TryGetValue(projectPath, out var entry))
+        {
+            return;
+        }
+        // Same two calls the watcher would eventually make — just immediate.
+        // Re-running them when a watcher event does land is harmless: the
+        // toolbar is rebuilt from the same config and the restart banner
+        // compares against the config we already applied.
+        _ = entry.Session.RefreshFromConfigAsync(config);
+        _jobScheduler?.InvalidateProject(projectPath);
+    }
+
     public Task<InboxListResult> ListInboxAsync(string projectName) =>
         OnDispatcherAsync(() =>
         {
@@ -449,10 +475,11 @@ public partial class MainWindow : IMcpBackend
             var beforeCount = existing.Commands?.Count ?? 0;
             var merged      = ProjectCommandMutator.Upsert(existing.Commands, newCommand);
             var replaced    = merged.Count == beforeCount;
+            var updated     = existing with { Commands = merged };
 
             try
             {
-                _projectConfigStore.Save(project.Path, existing with { Commands = merged });
+                _projectConfigStore.Save(project.Path, updated);
             }
             catch (Exception ex)
             {
@@ -460,9 +487,7 @@ public partial class MainWindow : IMcpBackend
                 return new ToolCallResult(false, $"Could not write .firepit/config.json: {ex.Message}");
             }
 
-            // The IProjectConfigWatcher tied to this project (see SetupProjectConfigWatcher)
-            // observes the file write and calls SessionTab.RefreshFromConfigAsync — toolbar
-            // hot-reloads without any extra plumbing here.
+            ApplyConfigToOpenTab(project.Path, updated);
             Log.Information("MCP add_command: {Action} '{Name}' ({Type}) in {Project}",
                 replaced ? "replaced" : "added", spec.Name, type, project.Name);
             return new ToolCallResult(true,
@@ -503,9 +528,10 @@ public partial class MainWindow : IMcpBackend
                 return new ToolCallResult(true, $"No command '{commandName}' in {project.Name} (nothing to remove)");
             }
 
+            var updated = existing with { Commands = updatedCommands };
             try
             {
-                _projectConfigStore.Save(project.Path, existing with { Commands = updatedCommands });
+                _projectConfigStore.Save(project.Path, updated);
             }
             catch (Exception ex)
             {
@@ -513,6 +539,7 @@ public partial class MainWindow : IMcpBackend
                 return new ToolCallResult(false, $"Could not write .firepit/config.json: {ex.Message}");
             }
 
+            ApplyConfigToOpenTab(project.Path, updated);
             Log.Information("MCP remove_command: '{Name}' from {Project}", commandName, project.Name);
             return new ToolCallResult(true, $"Removed command '{commandName}' from {project.Name}");
         });
