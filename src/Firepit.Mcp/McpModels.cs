@@ -174,6 +174,26 @@ public sealed record BlueprintApplyResult(
     IReadOnlyList<string>? Actions = null,
     IReadOnlyList<string>? Warnings = null);
 
+/// <summary>
+/// One entry in a project's artifact pane, as reported over the wire.
+/// <paramref name="Kind"/> is the lowercase classification (image, markdown,
+/// text, document, executable, archive, other) so an agent can tell what it
+/// linked without re-deriving it from the extension. <paramref name="Exists"/>
+/// is false for a link whose target has been moved or deleted — the entry is
+/// still listed so it can be cleaned up deliberately.
+/// </summary>
+public sealed record ArtifactSummary(
+    string Path,
+    string Label,
+    string Kind,
+    bool Exists,
+    string? Note = null,
+    string? AddedAtUtc = null);
+
+public sealed record ArtifactListResult(
+    string Project,
+    IReadOnlyList<ArtifactSummary> Artifacts);
+
 // Resource definition returned by resources/list. Tool definitions live as
 // internal records next to the catalog (McpToolDefinitionRaw) — they carry
 // the inline JSON schema string rather than a parsed JsonElement.

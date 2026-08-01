@@ -376,6 +376,61 @@ internal static class McpToolDefinitions
               "additionalProperties": false
             }
             """),
+
+        new("firepit_artifact_add",
+            "Pin a file into the project's artifact pane (the paperclip panel) so the user can " +
+            "open it without hunting through folders. USE THIS whenever you produce something " +
+            "the user will want to look at: a report, screenshot, diagram, generated image, " +
+            "log excerpt, build output, or an executable you just built for them to run. " +
+            "Links only — the file stays where it is and removing the entry never deletes it. " +
+            "Upsert by file: re-adding the same path updates its label and note in place. " +
+            "Executables are marked with a run icon in the pane, so linking one is fine and " +
+            "honest. To drop an entry use firepit_artifact_remove.",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "path":        { "type": "string", "description": "File to link. Absolute, or relative to the project root (relative keeps working on another machine)." },
+                "label":       { "type": "string", "description": "Display name in the pane; defaults to the file name." },
+                "note":        { "type": "string", "description": "One line of context, e.g. 'crash repro, step 4'." },
+                "projectName": { "type": "string", "description": "Project to add to; omit for the caller's own project." }
+              },
+              "required": ["path"],
+              "additionalProperties": false
+            }
+            """),
+
+        new("firepit_artifact_remove",
+            "Remove a link from the project's artifact pane. The file on disk is never touched — " +
+            "this only unpins it. Address it by 'path' or by the 'label' shown in the pane. " +
+            "Idempotent: removing something that isn't pinned returns ok with a note. Use this " +
+            "to clear artifacts that have gone stale rather than letting the pane silt up.",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "path":        { "type": "string", "description": "Linked path (absolute or project-relative)." },
+                "label":       { "type": "string", "description": "Display label, if you don't have the path." },
+                "projectName": { "type": "string", "description": "Project to remove from; omit for the caller's own project." }
+              },
+              "additionalProperties": false
+            }
+            """),
+
+        new("firepit_artifact_list",
+            "List what is currently pinned in the project's artifact pane: path, label, note, " +
+            "kind (image/markdown/text/document/executable/archive/other) and whether the target " +
+            "still exists. Read-only. Check this before adding, so you update an existing entry " +
+            "instead of piling up near-duplicates, and to spot dead links (exists=false).",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "projectName": { "type": "string", "description": "Project to inspect; omit for the caller's own project." }
+              },
+              "additionalProperties": false
+            }
+            """),
     ];
 }
 

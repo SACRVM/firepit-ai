@@ -51,6 +51,7 @@ public partial class MainWindow : Window
     private readonly IStateStore _stateStore;
     private readonly Firepit.Core.ProjectConfig.CommandsTrustLedger _commandsTrust;
     private readonly IProjectConfigStore _projectConfigStore = new JsonProjectConfigStore();
+    private readonly Firepit.Core.Artifacts.IArtifactStore _artifactStore = new Firepit.Core.Artifacts.JsonArtifactStore();
     private readonly Dictionary<string, IProjectConfigWatcher> _configWatchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, InboxWatcher> _inboxWatchers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RunsWatcher> _runsWatchers = new(StringComparer.OrdinalIgnoreCase);
@@ -105,6 +106,7 @@ public partial class MainWindow : Window
         _mcpProjector = new ClaudeCodeMcpProjector();
 
         PickerList.ItemsSource = _pickerItems;
+        InitializeArtifactPane();
 
         Loaded += OnLoaded;
         Closing += OnClosing;
@@ -1034,6 +1036,9 @@ public partial class MainWindow : Window
             // because the headers live inside it via the TabControl template.
             selected.BringIntoView();
         }
+
+        // Pane follows the active project — artifacts are per-project.
+        RefreshArtifactPaneForActiveTab();
 
         if (Tabs.SelectedItem is TabItem { Tag: SessionTab session })
         {

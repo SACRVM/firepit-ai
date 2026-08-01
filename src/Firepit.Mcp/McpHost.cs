@@ -490,6 +490,42 @@ public sealed class McpHost : IDisposable
                 var result = await _backend.ApplyBlueprintAsync(project, blueprint, fix);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.BlueprintApplyResult)));
             }
+            case "firepit_artifact_add":
+            {
+                var path = args["path"]?.GetValue<string>();
+                if (string.IsNullOrWhiteSpace(path))
+                    return BuildErrorResponse(id, -32602, "missing 'path'");
+                var project = args["projectName"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
+                if (string.IsNullOrEmpty(project))
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                var label = args["label"]?.GetValue<string?>();
+                var note  = args["note"]?.GetValue<string?>();
+                var result = await _backend.AddArtifactAsync(project, path, label, note);
+                return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
+            }
+            case "firepit_artifact_remove":
+            {
+                var path  = args["path"]?.GetValue<string?>();
+                var label = args["label"]?.GetValue<string?>();
+                if (string.IsNullOrWhiteSpace(path) && string.IsNullOrWhiteSpace(label))
+                    return BuildErrorResponse(id, -32602, "one of 'path' or 'label' is required");
+                var project = args["projectName"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
+                if (string.IsNullOrEmpty(project))
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                var result = await _backend.RemoveArtifactAsync(project, path, label);
+                return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
+            }
+            case "firepit_artifact_list":
+            {
+                var project = args["projectName"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
+                if (string.IsNullOrEmpty(project))
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                var result = await _backend.ListArtifactsAsync(project);
+                return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ArtifactListResult)));
+            }
             default:
                 return BuildErrorResponse(id, -32601, $"Unknown tool: {name}");
         }

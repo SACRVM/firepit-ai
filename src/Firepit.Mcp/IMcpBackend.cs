@@ -53,9 +53,10 @@ public interface IMcpBackend
     Task<ToolCallResult>              DeleteInboxMessageAsync(string projectName, string id);
 
     /// <summary>Append (or replace by name) a toolbar command in
-    /// &lt;projectPath&gt;/.firepit/config.json. The existing FileSystemWatcher
-    /// picks up the change and hot-reloads the toolbar via
-    /// SessionTab.RefreshFromConfigAsync — no extra plumbing needed here.</summary>
+    /// &lt;projectPath&gt;/.firepit/config.json. The handler applies the new
+    /// config to the open tab itself — it must not depend on the config
+    /// watcher, which only covers edits made outside Firepit and is gated
+    /// behind tabs.autoReloadOnConfigChange.</summary>
     Task<ToolCallResult>              AddProjectCommandAsync(string projectName, AddCommandSpec spec);
 
     /// <summary>Return the current toolbar commands list for a project (empty if
@@ -105,4 +106,21 @@ public interface IMcpBackend
     /// <summary>Idempotent apply of a blueprint to one project.</summary>
     Task<BlueprintApplyResult>        ApplyBlueprintAsync(string projectName, string blueprintName,
                                                           bool fixBlanketIgnores);
+
+    /// <summary>Link a file into the project's artifact pane
+    /// (&lt;projectPath&gt;/.firepit/artifacts.json). Upsert by resolved path:
+    /// re-linking the same file updates its label/note in place. The pane
+    /// refreshes immediately — same rule as the command tools, no watcher
+    /// dependency.</summary>
+    Task<ToolCallResult>              AddArtifactAsync(string projectName, string path,
+                                                       string? label, string? note);
+
+    /// <summary>Drop an artifact link by path or label. The file itself is
+    /// never touched. Idempotent — an unknown target returns Ok with a
+    /// "nothing to remove" note.</summary>
+    Task<ToolCallResult>              RemoveArtifactAsync(string projectName, string? path, string? label);
+
+    /// <summary>List the project's artifact links, including ones whose target
+    /// no longer exists (Exists=false) so they can be cleaned up.</summary>
+    Task<ArtifactListResult>          ListArtifactsAsync(string projectName);
 }

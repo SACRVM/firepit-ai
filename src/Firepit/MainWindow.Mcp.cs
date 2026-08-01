@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -5,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Firepit.Core.Artifacts;
 using Firepit.Core.Inbox;
 using Firepit.Core.ProjectConfig;
 using Firepit.Core.Settings;
@@ -542,6 +544,118 @@ public partial class MainWindow : IMcpBackend
             ApplyConfigToOpenTab(project.Path, updated);
             Log.Information("MCP remove_command: '{Name}' from {Project}", commandName, project.Name);
             return new ToolCallResult(true, $"Removed command '{commandName}' from {project.Name}");
+        });
+
+    public Task<ToolCallResult> AddArtifactAsync(string projectName, string path, string? label, string? note) =>
+        OnDispatcherAsync(() =>
+        {
+            var project = FindProjectByName(projectName);
+            if (project is null) return new ToolCallResult(false, $"Unknown project: {projectName}");
+            if (string.IsNullOrWhiteSpace(path))
+                return new ToolCallResult(false, "artifact 'path' is required and cannot be empty");
+
+            var entry = new ArtifactEntry(
+                Path:       path.Trim(),
+                Label:      string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
+                Note:       string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                AddedAtUtc: DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+
+            IReadOnlyList<ArtifactEntry> updated;
+            bool replaced;
+            try
+            {
+                var existing = _artifactStore.Load(project.Path);
+                (updated, replaced) = ArtifactMutator.Upsert(existing, entry, project.Path);
+                _artifactStore.Save(project.Path, updated);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "AddArtifact: failed to save artifacts for {Project}", project.Name);
+                return new ToolCallResult(false, $"Could not write .firepit/artifacts.json: {ex.Message}");
+            }
+
+            RefreshArtifactPane(project.Path);
+            var resolved = ArtifactResolver.Resolve(entry, project.Path);
+            Log.Information("MCP artifact_add: {Action} '{Label}' ({Kind}, exists={Exists}) in {Project}",
+                replaced ? "replaced" : "added", resolved.Label, resolved.Kind, resolved.Exists, project.Name);
+
+            // A link to a file that isn't there yet is legal (the agent may be
+            // about to write it) but worth saying out loud — a silently dead
+            // link is the one failure mode that makes the pane untrustworthy.
+            var suffix = resolved.Exists ? string.Empty : " — note: that path does not exist yet";
+            return new ToolCallResult(true,
+                $"{(replaced ? "Updated" : "Pinned")} artifact '{resolved.Label}' in {project.Name}{suffix}");
+        });
+
+    public Task<ToolCallResult> RemoveArtifactAsync(string projectName, string? path, string? label) =>
+        OnDispatcherAsync(() =>
+        {
+            var project = FindProjectByName(projectName);
+            if (project is null) return new ToolCallResult(false, $"Unknown project: {projectName}");
+
+            IReadOnlyList<ArtifactEntry> existing;
+            try
+            {
+                existing = _artifactStore.Load(project.Path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RemoveArtifact: failed to load artifacts for {Project}", project.Name);
+                return new ToolCallResult(false, $"Could not read .firepit/artifacts.json: {ex.Message}");
+            }
+
+            var target = !string.IsNullOrWhiteSpace(path) ? path! : label!;
+            var (updated, removed) = !string.IsNullOrWhiteSpace(path)
+                ? ArtifactMutator.RemoveByPath(existing, path!, project.Path)
+                : ArtifactMutator.RemoveByLabel(existing, label!, project.Path);
+
+            if (!removed)
+            {
+                return new ToolCallResult(true, $"No artifact '{target}' pinned in {project.Name} (nothing to remove)");
+            }
+
+            try
+            {
+                _artifactStore.Save(project.Path, updated);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RemoveArtifact: failed to save artifacts for {Project}", project.Name);
+                return new ToolCallResult(false, $"Could not write .firepit/artifacts.json: {ex.Message}");
+            }
+
+            RefreshArtifactPane(project.Path);
+            Log.Information("MCP artifact_remove: '{Target}' from {Project}", target, project.Name);
+            return new ToolCallResult(true, $"Unpinned artifact '{target}' from {project.Name} (file left untouched)");
+        });
+
+    public Task<ArtifactListResult> ListArtifactsAsync(string projectName) =>
+        OnDispatcherAsync(() =>
+        {
+            var project = FindProjectByName(projectName);
+            if (project is null) return new ArtifactListResult(projectName, Array.Empty<ArtifactSummary>());
+
+            IReadOnlyList<ArtifactEntry> entries;
+            try
+            {
+                entries = _artifactStore.Load(project.Path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "ListArtifacts: failed to load artifacts for {Project}", project.Name);
+                entries = [];
+            }
+
+            var summaries = ArtifactResolver.ResolveAll(entries, project.Path)
+                .Select(a => new ArtifactSummary(
+                    Path:       a.Path,
+                    Label:      a.Label,
+                    Kind:       a.Kind.ToString().ToLowerInvariant(),
+                    Exists:     a.Exists,
+                    Note:       a.Note,
+                    AddedAtUtc: a.AddedAtUtc))
+                .ToArray();
+            return new ArtifactListResult(project.Name, summaries);
         });
 
     private static CommandSummary ToSummary(ProjectCommand c) => new(

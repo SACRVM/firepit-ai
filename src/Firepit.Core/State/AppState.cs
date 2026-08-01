@@ -32,7 +32,11 @@ public sealed record AppState(
     // (different hash → re-prompt). Until trusted, RunCommand for shell
     // type bails. URL and prompt-type commands skip the gate entirely —
     // they can't execute arbitrary local code.
-    IReadOnlyList<TrustedProjectCommands>? TrustedCommands = null)
+    IReadOnlyList<TrustedProjectCommands>? TrustedCommands = null,
+    // Artifact pane pinned open. Unpinned (default) means the pane opens only
+    // when the paperclip is clicked and closes with it; pinned restores it on
+    // the next launch.
+    bool ArtifactPanePinned = false)
 {
     public const int CurrentVersion = 1;
 
