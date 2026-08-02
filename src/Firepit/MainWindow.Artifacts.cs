@@ -125,9 +125,9 @@ public partial class MainWindow
         }
         else
         {
-            ArtifactPaneTitle.Text = "Artefakte";
+            ArtifactPaneTitle.Text = "Artifacts";
             ArtifactList.ItemsSource = null;
-            ArtifactEmptyState.Text = "Kein Projekt offen.";
+            ArtifactEmptyState.Text = "No project open.";
             ArtifactEmptyState.Visibility = Visibility.Visible;
         }
     }
@@ -149,10 +149,10 @@ public partial class MainWindow
             .Select(a => new ArtifactItem(a))
             .ToList();
 
-        ArtifactPaneTitle.Text = items.Count > 0 ? $"Artefakte · {items.Count}" : "Artefakte";
+        ArtifactPaneTitle.Text = items.Count > 0 ? $"Artifacts · {items.Count}" : "Artifacts";
         ArtifactList.ItemsSource = items;
         ArtifactEmptyState.Text =
-            "Noch nichts abgelegt. Der Agent kann hier Dateien anheften — Reports, Screenshots, Builds.";
+            "Nothing pinned yet. The agent can pin files here — reports, screenshots, builds.";
         ArtifactEmptyState.Visibility = items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -206,7 +206,7 @@ public partial class MainWindow
         var path = item.Resolved.AbsolutePath;
         if (!item.Resolved.Exists)
         {
-            ShowToast($"Artefakt fehlt: {path}", isError: true);
+            ShowToast($"Artifact missing: {path}", isError: true);
             return;
         }
         try
@@ -219,7 +219,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not open artifact {Path}", path);
-            ShowToast($"Konnte nicht öffnen: {ex.Message}", isError: true);
+            ShowToast($"Could not open: {ex.Message}", isError: true);
         }
     }
 
@@ -244,7 +244,7 @@ public partial class MainWindow
                 var parent = Path.GetDirectoryName(path);
                 if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent))
                 {
-                    ShowToast("Ordner existiert nicht mehr", isError: true);
+                    ShowToast("That folder no longer exists", isError: true);
                     return;
                 }
                 System.Diagnostics.Process.Start(
@@ -254,7 +254,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not reveal artifact {Path}", path);
-            ShowToast($"Explorer-Fehler: {ex.Message}", isError: true);
+            ShowToast($"Explorer error: {ex.Message}", isError: true);
         }
     }
 
@@ -277,7 +277,7 @@ public partial class MainWindow
         }
         if (item.Resolved.Kind != ArtifactKind.Executable)
         {
-            ShowToast("Nur ausführbare Artefakte können in die Toolbar", isError: true);
+            ShowToast("Only executable artifacts can become toolbar buttons", isError: true);
             return;
         }
 
@@ -294,14 +294,14 @@ public partial class MainWindow
             var updated = existing with { Commands = merged };
             _projectConfigStore.Save(projectPath, updated);
             ApplyConfigToOpenTab(projectPath, updated);
-            ShowToast($"'{item.Resolved.Label}' ist jetzt ein Toolbar-Button");
+            ShowToast($"'{item.Resolved.Label}' is now a toolbar button");
             Log.Information("Artifact promoted to command: {Label} in {Project}",
                 item.Resolved.Label, active.Context.Name);
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not promote artifact {Path}", item.Resolved.AbsolutePath);
-            ShowToast($"Konnte nicht übernehmen: {ex.Message}", isError: true);
+            ShowToast($"Could not promote: {ex.Message}", isError: true);
         }
     }
 
@@ -332,7 +332,7 @@ public partial class MainWindow
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not remove artifact {Path}", item.Resolved.AbsolutePath);
-            ShowToast($"Konnte nicht entfernen: {ex.Message}", isError: true);
+            ShowToast($"Could not remove: {ex.Message}", isError: true);
         }
     }
 }
@@ -371,14 +371,14 @@ public sealed class ArtifactItem
 
     /// <summary>Note when there is one; otherwise the missing-file warning.</summary>
     public string SubText => !Resolved.Exists
-        ? "fehlt — Datei nicht gefunden"
+        ? "missing — file not found"
         : Resolved.Note ?? string.Empty;
 
     public Visibility SubTextVisibility =>
         string.IsNullOrEmpty(SubText) ? Visibility.Collapsed : Visibility.Visible;
 
     public string ToolTipText => Resolved.Kind == ArtifactKind.Executable
-        ? $"{Resolved.AbsolutePath}\nKlick führt dieses Programm aus."
+        ? $"{Resolved.AbsolutePath}\nClicking runs this program."
         : Resolved.AbsolutePath;
 
     private static Geometry IconFor(ArtifactKind kind)

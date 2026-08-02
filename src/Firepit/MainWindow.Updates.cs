@@ -149,7 +149,7 @@ public partial class MainWindow
                 IgnoreUpdate(info);
                 break;
             case MessageChoice.Dismissed:
-                // "Später" — leave the badge up, ask again next check.
+                // "Later" — leave the badge up, ask again next check.
                 break;
         }
     }

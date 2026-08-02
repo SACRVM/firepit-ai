@@ -197,7 +197,7 @@
                         Cursor="Hand"
                         VerticalAlignment="Center"
                         Margin="0,0,8,0"
-                        ToolTip="Eine neue Firepit-Version steht bereit">
+                        ToolTip="A newer Firepit version is available">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="Bd" Background="#2A211A" CornerRadius="10" Padding="9,3">
@@ -223,7 +223,7 @@
                 <Button x:Name="ArtifactPaneButton"
                         Style="{StaticResource ArtifactPaperclipButton}"
                         Click="OnArtifactPaneToggleClick"
-                        ToolTip="Artefakte (Strg+Umschalt+A)" />
+                        ToolTip="Artifacts (Ctrl+Shift+A)" />
                 <Button x:Name="SettingsButton"
                         Style="{StaticResource SettingsGearButton}"
                         Click="OnSettingsClick"
@@ -316,7 +316,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
                                    x:Name="ArtifactPaneTitle"
-                                   Text="Artefakte"
+                                   Text="Artifacts"
                                    Foreground="#E8E2D8"
                                    FontFamily="Cascadia Code, Consolas, Courier New"
                                    FontSize="{DynamicResource MediumFontSize}"
@@ -327,7 +327,7 @@
                                 Cursor="Hand"
                                 Width="24" Height="24"
                                 Margin="0,0,2,0"
-                                ToolTip="Pane offen halten">
+                                ToolTip="Keep this pane open">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
@@ -358,7 +358,7 @@
                                 Click="OnArtifactPaneCloseClick"
                                 Cursor="Hand"
                                 Width="24" Height="24"
-                                ToolTip="Schließen">
+                                ToolTip="Close">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="Bd" Background="Transparent" CornerRadius="3">
@@ -390,7 +390,7 @@
                                        FontFamily="Cascadia Code, Consolas, Courier New"
                                        FontSize="{DynamicResource SmallFontSize}"
                                        TextWrapping="Wrap"
-                                       Text="Noch nichts abgelegt. Der Agent kann hier Dateien anheften — Reports, Screenshots, Builds." />
+                                       Text="Nothing pinned yet. The agent can pin files here — reports, screenshots, builds." />
 
                             <ItemsControl x:Name="ArtifactList" Margin="6,0,6,10">
                                 <ItemsControl.ItemTemplate>
@@ -402,12 +402,12 @@
                                                 ToolTip="{Binding ToolTipText}">
                                             <Button.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Öffnen" Click="OnArtifactOpenClick" />
-                                                    <MenuItem Header="Im Explorer zeigen" Click="OnArtifactRevealClick" />
+                                                    <MenuItem Header="Open" Click="OnArtifactOpenClick" />
+                                                    <MenuItem Header="Show in Explorer" Click="OnArtifactRevealClick" />
                                                     <Separator />
-                                                    <MenuItem Header="In Toolbar übernehmen" Click="OnArtifactPromoteClick" />
+                                                    <MenuItem Header="Promote to toolbar" Click="OnArtifactPromoteClick" />
                                                     <Separator />
-                                                    <MenuItem Header="Entfernen (Datei bleibt)" Click="OnArtifactRemoveClick" />
+                                                    <MenuItem Header="Remove (file stays)" Click="OnArtifactRemoveClick" />
                                                 </ContextMenu>
                                             </Button.ContextMenu>
                                             <Button.Template>
