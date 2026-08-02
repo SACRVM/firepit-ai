@@ -140,6 +140,13 @@ V1: just `--continue`. V2 introduces `--resume <session-id>` with a history drop
 - DI: a lightweight container in the shell wires Core/Process/Adapters services into the WPF views.
 - Logging: Serilog to `%LOCALAPPDATA%\Firepit\logs`, rotating file. Format and retention TBD (see SPEC §Open Questions).
 - No code-side dependencies on brand vocabulary. If you write `class FireKindler`, you've drifted — rename.
+- **The app is English. Every string.** Labels, tooltips, menu headers, toasts,
+  dialogs, empty states, log messages, exception text, MCP tool descriptions —
+  all English, no exceptions, no localization layer. The author works in German
+  and sessions are usually held in German; that is the *conversation* language
+  and it must not leak into the product. Before finishing any UI work, grep your
+  diff for German (`ä ö ü ß`, `der|die|das|nicht|Datei|Ordner`) — this has
+  regressed twice (v0.9.0 artifact pane, update badge tooltip).
 
 ---
 
