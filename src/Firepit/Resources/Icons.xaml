@@ -43,6 +43,9 @@
     <Geometry x:Key="IconRocket">M 8,2 C 10,4 11,6 11,8 L 11,10 L 8,10 L 5,10 L 5,8 C 5,6 6,4 8,2 Z M 6,11 L 8,13 L 10,11 M 7,7 A 1,1 0 1 1 9,7 A 1,1 0 1 1 7,7</Geometry>
     <Geometry x:Key="IconBook">M 2,2 L 2,12 L 7,11 L 12,12 L 12,2 L 7,3 Z M 7,3 L 7,11</Geometry>
     <Geometry x:Key="IconTerminal">M 2,3 L 12,3 L 12,11 L 2,11 Z M 4,5.5 L 5.5,7 L 4,8.5 M 7,9 L 10,9</Geometry>
+    <!-- Code brackets </> — editor-agnostic "open in code editor". No frame,
+         so it stays distinguishable from IconTerminal (box+prompt) at 14px. -->
+    <Geometry x:Key="IconCode">M 4.5,4 L 2,7 L 4.5,10 M 9.5,4 L 12,7 L 9.5,10 M 8.2,3 L 5.8,11</Geometry>
     <Geometry x:Key="IconCheck">M 3,7.5 L 6,10.5 L 11,4.5</Geometry>
     <Geometry x:Key="IconX">M 3.5,3.5 L 10.5,10.5 M 10.5,3.5 L 3.5,10.5</Geometry>
     <Geometry x:Key="IconRefresh">M 12,7 A 5,5 0 1 1 7,2 M 5.5,3.5 L 7,2 L 8.5,3.5</Geometry>

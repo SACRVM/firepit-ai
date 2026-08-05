@@ -127,16 +127,23 @@ public sealed record TabSettings(
         AutoReloadOnConfigChange: true);
 }
 
-public sealed record ShellsSettings(string Preferred)
+/// <summary>
+/// External program preferences. <see cref="Preferred"/> picks the external
+/// shell (<c>wt</c> → Windows Terminal, PowerShell fallback).
+/// <see cref="Editor"/> is what the toolbar's Editor button runs with the
+/// project path as its argument — any editor CLI works (<c>code</c>,
+/// <c>subl</c>, <c>devenv</c>, or a full exe path); default is VS Code's shim.
+/// </summary>
+public sealed record ShellsSettings(string Preferred, string Editor = "code")
 {
-    public static readonly ShellsSettings Defaults = new(Preferred: "wt");
+    public static readonly ShellsSettings Defaults = new(Preferred: "wt", Editor: "code");
 }
 
 /// <summary>
 /// Background update-check config (grouped under the "updates" key). Firepit
 /// polls GitHub Releases for a newer version and surfaces a badge in the
 /// caption bar. <see cref="IgnoredVersion"/> is the version the user chose to
-/// dismiss ("Diese Version ignorieren") — the badge stays hidden until a
+/// dismiss ("Ignore this version") — the badge stays hidden until a
 /// strictly higher version appears. Set <see cref="CheckForUpdates"/> to false
 /// to opt out entirely.
 /// </summary>

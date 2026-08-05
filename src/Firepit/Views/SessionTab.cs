@@ -70,6 +70,7 @@ public sealed class SessionTab : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _startTask;
     private readonly Firepit.Core.ProjectConfig.CommandsTrustLedger? _trustLedger;
+    private readonly string _editorCommand;
     private readonly CommandRunner _commandRunner;
     private bool _initialized;
     private bool _disposed;
@@ -84,9 +85,11 @@ public sealed class SessionTab : IAsyncDisposable
         TerminalThemeSettings? terminalTheme = null,
         int terminalFontSize = 14,
         Firepit.Core.ProjectConfig.ProjectConfig? initialConfig = null,
-        Firepit.Core.ProjectConfig.CommandsTrustLedger? trustLedger = null)
+        Firepit.Core.ProjectConfig.CommandsTrustLedger? trustLedger = null,
+        string editorCommand = "code")
     {
         _trustLedger = trustLedger;
+        _editorCommand = editorCommand;
         Context = context;
         _adapter = adapter;
         _quickLinks = quickLinks;
@@ -132,6 +135,7 @@ public sealed class SessionTab : IAsyncDisposable
         _toolbar.ResumeRequested += (_, _) => _ = RekindleAsync(resume: true, confirmIfBurning: true);
         _toolbar.ExplorerRequested += (_, _) => OpenExplorer();
         _toolbar.ShellRequested += (_, elevated) => OpenExternalShell(elevated);
+        _toolbar.EditorRequested += (_, _) => OpenEditor();
         _toolbar.ConfigureRequested += (_, _) => OpenProjectConfig();
         _toolbar.InboxRequested += (_, _) => OnInboxButtonClicked();
         _toolbar.QuickLinkClicked += (_, link) => OpenQuickLink(link);
@@ -974,6 +978,75 @@ public sealed class SessionTab : IAsyncDisposable
                 ShowFatal($"Cannot open shell: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Open the project in the configured editor (settings.json →
+    /// <c>shells.editor</c>, default <c>code</c>) with the project path as the
+    /// only argument. A launcher that resolves to a cmd-shim on PATH — VS
+    /// Code's <c>code.cmd</c> is the canonical case — runs through a hidden
+    /// cmd.exe so no console window flashes; everything else (exe names, full
+    /// paths) goes straight through ShellExecute.
+    /// </summary>
+    private void OpenEditor()
+    {
+        try
+        {
+            var shim = ResolveCmdShim(_editorCommand);
+            System.Diagnostics.Process.Start(shim is not null
+                ? new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/d /c \"\"{shim}\" \"{Context.Path}\"\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+                : new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = _editorCommand,
+                    Arguments = $"\"{Context.Path}\"",
+                    UseShellExecute = true,
+                });
+        }
+        catch (Exception ex)
+        {
+            ShowFatal($"Cannot open editor '{_editorCommand}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// PATH lookup for a bare command name, returning the full path only when
+    /// the first hit (shell resolution order: PATH dirs, then PATHEXT within
+    /// each) is a .cmd/.bat shim. Names that resolve to an exe, and anything
+    /// given as a path, return null — ShellExecute handles those fine.
+    /// </summary>
+    private static string? ResolveCmdShim(string command)
+    {
+        if (command.Contains('\\') || command.Contains('/'))
+        {
+            return null;
+        }
+        var candidates = System.IO.Path.HasExtension(command)
+            ? [command]
+            : new[] { command + ".com", command + ".exe", command + ".bat", command + ".cmd" };
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                     .Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            foreach (var candidate in candidates)
+            {
+                string full;
+                try
+                {
+                    full = System.IO.Path.Combine(dir.Trim(), candidate);
+                    if (!System.IO.File.Exists(full)) continue;
+                }
+                catch (ArgumentException) { break; /* malformed PATH entry */ }
+                var isShim = full.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+                          || full.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
+                return isShim ? full : null;
+            }
+        }
+        return null;
     }
 
     /// <summary>

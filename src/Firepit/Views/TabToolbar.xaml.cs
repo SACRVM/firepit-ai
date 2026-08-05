@@ -40,6 +40,7 @@ public partial class TabToolbar : UserControl
     /// <summary>Raised to open an external shell. The bool argument is true to
     /// launch elevated (run as administrator).</summary>
     public event EventHandler<bool>? ShellRequested;
+    public event EventHandler? EditorRequested;
     public event EventHandler? ConfigureRequested;
     /// <summary>Raised when the user clicks the always-visible Inbox toolbar
     /// button. SessionTab owns the modal-confirm + PTY-paste flow; the toolbar
@@ -423,6 +424,7 @@ public partial class TabToolbar : UserControl
     private void OnRekindleClick(object sender, RoutedEventArgs e)  => RekindleRequested?.Invoke(this, EventArgs.Empty);
     private void OnResumeClick(object sender, RoutedEventArgs e)    => ResumeRequested?.Invoke(this, EventArgs.Empty);
     private void OnExplorerClick(object sender, RoutedEventArgs e)  => ExplorerRequested?.Invoke(this, EventArgs.Empty);
+    private void OnEditorClick(object sender, RoutedEventArgs e)    => EditorRequested?.Invoke(this, EventArgs.Empty);
     private void OnConfigureClick(object sender, RoutedEventArgs e) => ConfigureRequested?.Invoke(this, EventArgs.Empty);
 
     // Left-click opens a normal shell; Shift+Click opens it elevated — the

@@ -841,7 +841,8 @@ public partial class MainWindow : Window
             terminalTheme: _settings.Terminal,
             terminalFontSize: (_settings.Ui ?? UiSettings.Defaults).ResolvedFontSize,
             initialConfig: initialConfig,
-            trustLedger: _commandsTrust);
+            trustLedger: _commandsTrust,
+            editorCommand: _settings.Shells?.Editor ?? "code");
         var tabItem = new TabItem
         {
             Header = session.Header,
