@@ -75,6 +75,13 @@ public partial class MainWindow : Window
     private System.Windows.Point _dragStart;
     private const double DragThresholdPx = 8.0;
 
+    // Debounces the continuous tab-layout persistence. state.json used to be
+    // written only in OnClosing — which never runs when Windows kills the
+    // process at OS shutdown/restart, so the "restored" layout could be days
+    // stale. Every layout change now schedules a save; a hard kill loses at
+    // most the last second.
+    private DispatcherTimer? _stateSaveTimer;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -112,6 +119,9 @@ public partial class MainWindow : Window
         Closing += OnClosing;
         SourceInitialized += OnSourceInitialized;
         StateChanged += OnWindowStateChanged;
+        LocationChanged += (_, _) => ScheduleStateSave();
+        SizeChanged += (_, _) => ScheduleStateSave();
+        Application.Current.SessionEnding += OnOsSessionEnding;
 
         Tabs.AllowDrop = true;
         Tabs.DragOver  += OnTabsDragOver;
@@ -746,6 +756,42 @@ public partial class MainWindow : Window
         Icon: source.Icon,
         Disabled: source.Disabled ?? false);
 
+    /// <summary>
+    /// Open a project tab from a user gesture (picker, folder browse). When a
+    /// previous conversation could be resumed — the tab was closed earlier
+    /// this run, or the agent left a transcript on disk — ask whether to
+    /// resume or start fresh instead of silently deciding; Esc opens nothing.
+    /// MCP-driven opens (<see cref="SummonByName"/>) stay prompt-free: an
+    /// agent must never block on a modal dialog.
+    /// </summary>
+    private void OpenSessionTabInteractive(Project project)
+    {
+        var resumable = !_openTabs.ContainsKey(project.Path)
+            && (_resumableProjects.Contains(project.Path)
+                || (_adapters.TryGetValue(project.AdapterId, out var adapter)
+                    && adapter.HasResumableSession(new ProjectContext(project))));
+        if (!resumable)
+        {
+            OpenSessionTab(project, resume: false);
+            return;
+        }
+
+        var choice = MessageDialog.ShowChoice(
+            this,
+            title: "Resume last session?",
+            message: $"{project.Name} has a previous session.\n\nResume it, or start a new one?",
+            primaryLabel: "Resume last",
+            secondaryLabel: "New session");
+        if (choice == MessageChoice.Dismissed)
+        {
+            return;
+        }
+        // The explicit choice overrides the silent close-and-reopen
+        // auto-resume in OpenSessionTab — drop the flag either way.
+        _resumableProjects.Remove(project.Path);
+        OpenSessionTab(project, resume: choice == MessageChoice.Primary);
+    }
+
     private void OpenSessionTab(Project project, bool resume)
     {
         if (_openTabs.TryGetValue(project.Path, out var existing))
@@ -814,6 +860,7 @@ public partial class MainWindow : Window
         TryAttachConfigWatcher(project.Path, session);
         TryAttachInboxWatcher(project.Path, session);
         TryAttachRunsWatcher(project.Path, session, initialConfig);
+        ScheduleStateSave();
 
         if (deferred)
         {
@@ -1028,6 +1075,9 @@ public partial class MainWindow : Window
 
     private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // Active tab is part of the persisted layout (ActiveTabProjectName).
+        ScheduleStateSave();
+
         if (Tabs.SelectedItem is TabItem selected)
         {
             // Keep the active tab visible when the strip is scrolled past it
@@ -1186,6 +1236,7 @@ public partial class MainWindow : Window
         }
 
         UnmountTabContent(session);
+        ScheduleStateSave();
         try { await session.DisposeAsync(); } catch { /* ignored */ }
     }
 
@@ -1269,6 +1320,7 @@ public partial class MainWindow : Window
         Tabs.Items.Remove(source);
         Tabs.Items.Insert(insertIdx, source);
         source.IsSelected = true;
+        ScheduleStateSave();
         e.Handled = true;
     }
 
@@ -1393,16 +1445,16 @@ public partial class MainWindow : Window
         switch (e.Key)
         {
             case Key.Down:
-                if (_pickerItems.Count > 0)
-                {
-                    PickerList.SelectedIndex = 0;
-                    var container = (ListBoxItem?)PickerList.ItemContainerGenerator.ContainerFromIndex(0);
-                    container?.Focus();
-                    e.Handled = true;
-                }
+                MovePickerSelection(+1);
+                e.Handled = true;
+                break;
+            case Key.Up:
+                MovePickerSelection(-1);
+                e.Handled = true;
                 break;
             case Key.Enter:
-                ActivatePickerSelection(_pickerItems.FirstOrDefault());
+                ActivatePickerSelection(
+                    PickerList.SelectedItem as ProjectPickerItem ?? _pickerItems.FirstOrDefault());
                 e.Handled = true;
                 break;
             case Key.Escape:
@@ -1410,6 +1462,26 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
         }
+    }
+
+    /// <summary>
+    /// Move the picker selection while keyboard focus stays in the search box
+    /// — command-palette style. Focus never enters the list, so typing keeps
+    /// filtering and ↑/↓ keep walking the filtered results. (The old
+    /// focus-the-container approach broke right after filtering: the
+    /// ListBoxItem container isn't generated yet on the same tick, so Down
+    /// only ever re-selected the first row.)
+    /// </summary>
+    private void MovePickerSelection(int direction)
+    {
+        if (_pickerItems.Count == 0)
+        {
+            return;
+        }
+        PickerList.SelectedIndex = PickerList.SelectedIndex < 0
+            ? (direction > 0 ? 0 : _pickerItems.Count - 1)
+            : Math.Clamp(PickerList.SelectedIndex + direction, 0, _pickerItems.Count - 1);
+        PickerList.ScrollIntoView(PickerList.SelectedItem);
     }
 
     private void OnPickerListKeyDown(object sender, KeyEventArgs e)
@@ -1525,7 +1597,7 @@ public partial class MainWindow : Window
 
         ProjectPicker.IsOpen = false;
         var project = new Project(name, folder, ClaudeCodeAdapter.AdapterId);
-        OpenSessionTab(project, resume: false);
+        OpenSessionTabInteractive(project);
 
         // Refresh the in-memory list so the picker shows the new entry next time.
         ReloadProjectList();
@@ -1538,7 +1610,7 @@ public partial class MainWindow : Window
             return;
         }
         ProjectPicker.IsOpen = false;
-        OpenSessionTab(item.Project, resume: false);
+        OpenSessionTabInteractive(item.Project);
     }
 
     private void RefreshPickerItems(string filter)
@@ -1563,9 +1635,12 @@ public partial class MainWindow : Window
                 Status: open ? "open" : string.Empty,
                 NameBrush: open ? goldBrush : defaultBrush));
         }
-        // Don't auto-select the first row — it reads as "this is the default"
-        // and visually clutters the popup. Enter on the search box still picks
-        // _pickerItems.FirstOrDefault(); Down-arrow path explicitly sets index.
+        // With an active filter, pre-select the top hit so Enter's target is
+        // visible and ↑/↓ continue from it. The unfiltered list stays
+        // unselected — a default there reads as clutter; Enter still opens
+        // the first project via the FirstOrDefault fallback.
+        PickerList.SelectedIndex =
+            !string.IsNullOrWhiteSpace(filter) && _pickerItems.Count > 0 ? 0 : -1;
     }
 
     private void OnAboutClick(object sender, RoutedEventArgs e)
@@ -1638,39 +1713,91 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Debounced request to persist the tab layout. Collapses bursts (drag
+    /// reorder, rapid tab switching, window dragging) into one write a second
+    /// after the last change.
+    /// </summary>
+    private void ScheduleStateSave()
+    {
+        if (_restoring || !_settings.Tabs.PersistAcrossRestarts)
+        {
+            return;
+        }
+        if (_stateSaveTimer is null)
+        {
+            _stateSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _stateSaveTimer.Tick += (_, _) =>
+            {
+                _stateSaveTimer!.Stop();
+                SaveStateSnapshot();
+            };
+        }
+        _stateSaveTimer.Stop();
+        _stateSaveTimer.Start();
+    }
+
+    /// <summary>
+    /// Write the current tab layout, active tab, and window placement to
+    /// state.json, preserving every unrelated field (trust ledger, migration
+    /// flags, artifact-pane pin). Runs debounced on layout changes, on OS
+    /// session end, and finally in OnClosing — relying on OnClosing alone
+    /// loses the layout whenever Windows kills the process at shutdown.
+    /// </summary>
+    private void SaveStateSnapshot()
+    {
+        try
+        {
+            // Iterate Tabs.Items (visual order) rather than _openTabs.Values
+            // (insertion order) so drag-reordered sessions restore in the
+            // user's chosen layout.
+            var activeName = (Tabs.SelectedItem as TabItem)?.Tag is SessionTab activeSession
+                ? activeSession.Context.Name
+                : null;
+            var tabs = Tabs.Items.OfType<TabItem>()
+                .Where(t => t.Tag is SessionTab)
+                .Select(t =>
+                {
+                    var s = (SessionTab)t.Tag!;
+                    return new TabState(
+                        ProjectName: s.Context.Name,
+                        LastSessionResumable: s.State != Core.Sessions.SessionState.Dead);
+                })
+                .ToArray();
+            _stateStore.Save(_stateStore.Load() with
+            {
+                Tabs = tabs,
+                ActiveTabProjectName = activeName,
+                Window = CaptureWindowPlacement(),
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not persist tab state");
+        }
+    }
+
+    private void OnOsSessionEnding(object sender, SessionEndingCancelEventArgs e)
+    {
+        // OS shutdown/logoff. Save synchronously right here — past this
+        // handler the process can be terminated at any moment, and WPF's
+        // normal Closing pipeline is not guaranteed to run.
+        _stateSaveTimer?.Stop();
+        if (_settings.Tabs.PersistAcrossRestarts)
+        {
+            SaveStateSnapshot();
+        }
+    }
+
     private async void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         _disposedUpdates = true;
         _updateTimer?.Stop();
+        _stateSaveTimer?.Stop();
 
         if (_settings.Tabs.PersistAcrossRestarts)
         {
-            try
-            {
-                // Iterate Tabs.Items (visual order) rather than _openTabs.Values
-                // (insertion order) so drag-reordered sessions restore in the
-                // user's chosen layout.
-                var activeName = (Tabs.SelectedItem as TabItem)?.Tag is SessionTab activeSession
-                    ? activeSession.Context.Name
-                    : null;
-                var snapshot = new AppState(
-                    Version: AppState.CurrentVersion,
-                    Tabs: Tabs.Items.OfType<TabItem>()
-                        .Where(t => t.Tag is SessionTab)
-                        .Select(t =>
-                        {
-                            var s = (SessionTab)t.Tag!;
-                            return new TabState(
-                                ProjectName: s.Context.Name,
-                                LastSessionResumable: s.State != Core.Sessions.SessionState.Dead);
-                        })
-                        .ToArray(),
-                    ProjectConfigMigrationDone: _stateStore.Load().ProjectConfigMigrationDone,
-                    ActiveTabProjectName: activeName,
-                    Window: CaptureWindowPlacement());
-                _stateStore.Save(snapshot);
-            }
-            catch { /* persistence is best-effort */ }
+            SaveStateSnapshot();
         }
 
         var sessions = _openTabs.Values.Select(t => t.Session).ToArray();

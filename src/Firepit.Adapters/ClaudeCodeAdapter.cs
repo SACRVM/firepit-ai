@@ -1,3 +1,4 @@
+using System.Text;
 using Firepit.Core.Agents;
 using Firepit.Core.Projects;
 
@@ -48,5 +49,39 @@ public sealed class ClaudeCodeAdapter : IAgentAdapter
             Executable: executable,
             Arguments: arguments,
             WorkingDirectory: context.Path);
+    }
+
+    /// <summary>
+    /// Claude Code keeps one transcript folder per working directory under
+    /// <c>~/.claude/projects</c>, named after the absolute path with every
+    /// non-alphanumeric character flattened to '-'
+    /// (<c>D:\repos\foo</c> → <c>D--repos-foo</c>). A <c>*.jsonl</c> inside
+    /// means <c>--continue</c> has a conversation to pick up.
+    /// </summary>
+    public bool HasResumableSession(ProjectContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".claude", "projects", EncodeProjectDir(context.Path));
+            return Directory.Exists(dir) && Directory.EnumerateFiles(dir, "*.jsonl").Any();
+        }
+        catch (Exception)
+        {
+            // Unreadable home dir etc. — treat as "nothing to resume".
+            return false;
+        }
+    }
+
+    private static string EncodeProjectDir(string path)
+    {
+        var sb = new StringBuilder(path.Length);
+        foreach (var ch in path)
+        {
+            sb.Append(char.IsAsciiLetterOrDigit(ch) ? ch : '-');
+        }
+        return sb.ToString();
     }
 }
