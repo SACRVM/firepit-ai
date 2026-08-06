@@ -133,6 +133,7 @@
     <script src="xterm.js"></script>
     <script src="addon-fit.js"></script>
     <script src="addon-search.js"></script>
+    <script src="addon-web-links.js"></script>
     <script>
         (function () {
             'use strict';
@@ -243,6 +244,17 @@
 
             const fitAddon = new FitAddon.FitAddon();
             term.loadAddon(fitAddon);
+
+            // Clickable URLs (web-links addon). Ctrl+Click opens — the
+            // VS Code / Windows Terminal convention. A plain click stays
+            // selection (and, in mouse-reporting mode, the TUI's), so an
+            // accidental click can never launch a browser. The URL travels to
+            // the host over the bridge; the host validates the scheme and
+            // opens the system browser — the WebView2 itself never navigates.
+            term.loadAddon(new WebLinksAddon.WebLinksAddon(function (event, uri) {
+                if (!event.ctrlKey && !event.metaKey) return;
+                postToHost({ type: 'link', url: uri });
+            }));
 
             // Terminal-search addon. Decorations use brand warm tones —
             // active match takes the same accent as the selected-tab line so

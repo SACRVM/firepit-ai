@@ -432,6 +432,37 @@ public sealed class WebView2TerminalView : ITerminalView
         }
     }
 
+    /// <summary>
+    /// Ctrl+Click on a URL the web-links addon detected in terminal output.
+    /// The terminal renders agent-controlled text, so treat the URL as
+    /// untrusted: only http/https ever reach the system browser — no file://,
+    /// no javascript:, no custom app protocols. Opening happens via
+    /// ShellExecute in the default browser; the WebView2 never navigates.
+    /// </summary>
+    private static void HandleLink(string? url)
+    {
+        if (string.IsNullOrEmpty(url)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            Log.Debug("WV2 link: rejected non-web URL ({Url})", url);
+            return;
+        }
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = uri.AbsoluteUri,
+                UseShellExecute = true,
+            });
+            Log.Information("WV2 link: opened {Url}", uri.AbsoluteUri);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "WV2 link: could not open {Url}", uri.AbsoluteUri);
+        }
+    }
+
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string? json;
@@ -500,6 +531,13 @@ public sealed class WebView2TerminalView : ITerminalView
                         && textProp.ValueKind == JsonValueKind.String)
                     {
                         HandleCopy(textProp.GetString());
+                    }
+                    break;
+                case "link":
+                    if (doc.RootElement.TryGetProperty("url", out var urlProp)
+                        && urlProp.ValueKind == JsonValueKind.String)
+                    {
+                        HandleLink(urlProp.GetString());
                     }
                     break;
             }

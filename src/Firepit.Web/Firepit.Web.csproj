@@ -31,6 +31,9 @@
     <EmbeddedResource Include="Resources/node_modules/@xterm/addon-search/lib/addon-search.js">
       <LogicalName>Firepit.Web.Resources.addon-search.js</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Resources/node_modules/@xterm/addon-web-links/lib/addon-web-links.js">
+      <LogicalName>Firepit.Web.Resources.addon-web-links.js</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="Resources/CascadiaCode.ttf">
       <LogicalName>Firepit.Web.Resources.CascadiaCode.ttf</LogicalName>
     </EmbeddedResource>
