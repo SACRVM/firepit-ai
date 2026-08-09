@@ -64,6 +64,18 @@ public class JobSchedulerTests
         public IReadOnlyList<JobScheduleEntry> Enumerate() => Entries;
     }
 
+    // The scheduler fires runs on background tasks the tick doesn't await, so
+    // "the runner was invoked" is only observable eventually. Poll instead of
+    // sleeping a fixed amount — slow CI runners blow well past any constant.
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (!condition() && Environment.TickCount64 < deadline)
+        {
+            await Task.Delay(10);
+        }
+    }
+
     private static JobScheduleEntry Entry(string jobName, string cron,
         JobConcurrencyPolicy? policy = null) =>
         new(
@@ -90,7 +102,7 @@ public class JobSchedulerTests
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 9, 30, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(50);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
 
         Assert.Single(runner.Invocations);
         var inv = runner.Invocations.First();
@@ -124,9 +136,9 @@ public class JobSchedulerTests
         await using var sched = new JobScheduler(source, runner, history, clock);
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 9, 30, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(30);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(30);
+        await Task.Delay(30); // a wrong refire needs a moment to become visible
 
         Assert.Single(runner.Invocations);
     }
@@ -146,13 +158,13 @@ public class JobSchedulerTests
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 9, 30, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(30); // let runner enter Gate
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty); // runner is parked on Gate
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 10, 0, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
 
         runner.Gate!.SetResult();
-        await Task.Delay(50);
+        await WaitUntilAsync(() => history.Records.Any(r => r.Status == JobRunStatus.Skipped));
 
         Assert.Contains(history.Records, r => r.Status == JobRunStatus.Skipped);
         Assert.Single(runner.Invocations); // only the first actually ran
@@ -173,7 +185,7 @@ public class JobSchedulerTests
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 9, 30, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(30);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 10, 0, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
@@ -183,7 +195,7 @@ public class JobSchedulerTests
 
         // Let the first run complete; second should fire automatically.
         runner.Gate!.SetResult();
-        await Task.Delay(150);
+        await WaitUntilAsync(() => runner.Invocations.Count >= 2);
 
         Assert.Equal(2, runner.Invocations.Count);
     }
@@ -198,7 +210,7 @@ public class JobSchedulerTests
 
         await using var sched = new JobScheduler(source, runner, history, clock);
         await sched.TriggerNowAsync(@"C:\projects\demo", "check-mails", CancellationToken.None);
-        await Task.Delay(40);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
 
         Assert.Single(runner.Invocations);
         Assert.Equal(JobTrigger.Manual, runner.Invocations.First().Trigger);
@@ -219,7 +231,8 @@ public class JobSchedulerTests
 
         await using var sched = new JobScheduler(source, runner, history, clock);
         await sched.StartAsync(CancellationToken.None);
-        await Task.Delay(80);
+        await WaitUntilAsync(() => runner.Invocations.Any(i => i.Trigger == JobTrigger.Catchup));
+        await Task.Delay(50); // a wrong second catch-up needs a moment to become visible
 
         var catchups = runner.Invocations.Count(i => i.Trigger == JobTrigger.Catchup);
         Assert.Equal(1, catchups); // exactly one catch-up, not "all missed slots"
@@ -241,7 +254,8 @@ public class JobSchedulerTests
         var t1 = sched.TriggerNowAsync(@"C:\projects\demo", "slow", CancellationToken.None);
         var t2 = sched.TriggerNowAsync(@"C:\projects\demo", "slow", CancellationToken.None);
         await Task.WhenAll(t1, t2);
-        await Task.Delay(50);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
+        await Task.Delay(50); // a wrong second run needs a moment to become visible
 
         Assert.Single(runner.Invocations);
         runner.Gate!.SetResult();
@@ -263,13 +277,13 @@ public class JobSchedulerTests
 
         clock.UtcNow = new DateTimeOffset(2026, 5, 13, 9, 30, 30, TimeSpan.Zero);
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(40);
+        await WaitUntilAsync(() => !runner.Invocations.IsEmpty);
         Assert.Single(runner.Invocations);
 
         sched.InvalidateProject(@"C:\projects\demo");
 
         await sched.TickOnceAsync(CancellationToken.None);
-        await Task.Delay(40);
+        await WaitUntilAsync(() => runner.Invocations.Count >= 2);
         // Without invalidation the second tick at the same slot wouldn't refire
         // (cf. SecondTickAtSameSlot_DoesNotRefire). Invalidation restores the
         // anchor so the slot is "due" again from the scheduler's POV.
