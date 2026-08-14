@@ -1,6 +1,6 @@
 # Fishbowl integration
 
-[Fishbowl](https://github.com/chloe-dream/the-fishbowl) is a self-hosted personal memory store with an MCP surface. Wired into Firepit, it gives each project its own isolated memory backend that the agent can read from and write to via `search_memory`, `remember`, `get_memory`, and friends.
+[Fishbowl](https://github.com/SACRVM/the-fishbowl) is a self-hosted personal memory store with an MCP surface. Wired into Firepit, it gives each project its own isolated memory backend that the agent can read from and write to via `search_memory`, `remember`, `get_memory`, and friends.
 
 ## Mental model
 
@@ -18,7 +18,7 @@ dotnet run --project tools/init-project -- <project-slug>
 
 The tool creates the team if absent (idempotent — re-running reuses), mints a team-scoped API key with all read/write scopes, and prints both a `cmdkey` line and a Firepit `mcpOverrides` snippet on stderr. Token comes out on stdout for piping.
 
-See [`tools/init-project/README.md`](https://github.com/chloe-dream/the-fishbowl/tree/master/tools/init-project) in the Fishbowl repo for flags.
+See [`tools/init-project/README.md`](https://github.com/SACRVM/the-fishbowl/tree/master/tools/init-project) in the Fishbowl repo for flags.
 
 ## Wiring it into Firepit
 
@@ -61,7 +61,7 @@ Fishbowl exposes `/p/<slug>` as a server-side 302 to the team's SPA workspace. T
 
 ## Why no per-call `project_id` argument?
 
-The earlier design sketch (see git history of this doc, and Fishbowl's [issue #1](https://github.com/chloe-dream/the-fishbowl/issues/1)) imagined an `X-Project` header or a `project_id` tool argument. Both turned out to be redundant: Fishbowl's bearer-token authentication already carries a context binding (`fishbowl_context_type=team`, `fishbowl_context_id=<teamId>`), and the API/MCP layers already enforce that a token bound to team A cannot read team B's data. Adding a per-call argument would have been a soft second scoping mechanism on top of a hard one — strictly worse than just using one bearer per project.
+The earlier design sketch (see git history of this doc, and Fishbowl's [issue #1](https://github.com/SACRVM/the-fishbowl/issues/1)) imagined an `X-Project` header or a `project_id` tool argument. Both turned out to be redundant: Fishbowl's bearer-token authentication already carries a context binding (`fishbowl_context_type=team`, `fishbowl_context_id=<teamId>`), and the API/MCP layers already enforce that a token bound to team A cannot read team B's data. Adding a per-call argument would have been a soft second scoping mechanism on top of a hard one — strictly worse than just using one bearer per project.
 
 ## Note on storage location (v0.5.0+)
 

@@ -21,7 +21,7 @@ namespace Firepit;
 /// </summary>
 public partial class MainWindow
 {
-    private const string UpdateOwner = "chloe-dream";
+    private const string UpdateOwner = "SACRVM";
     private const string UpdateRepo = "firepit-ai";
 
     // One shared client for both the API check and the installer download.

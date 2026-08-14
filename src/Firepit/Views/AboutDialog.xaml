@@ -99,7 +99,7 @@
                        HorizontalAlignment="Center"
                        Margin="0,4,0,0" />
 
-            <TextBlock Text="by Chloe Dream"
+            <TextBlock Text="by SACRVM"
                        Foreground="#8C7A5C"
                        FontFamily="Cascadia Code, Consolas, Courier New"
                        FontSize="{DynamicResource SmallFontSize}"

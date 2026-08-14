@@ -352,7 +352,7 @@ These apply throughout — call them out in PRs/commits:
 
 ## M8 — Local Ollama Sidecar (Deferred, v0.6 Target)
 
-> See [issue #10](https://github.com/chloe-dream/firepit-ai/issues/10) for the full proposal.
+> See [issue #10](https://github.com/SACRVM/firepit-ai/issues/10) for the full proposal.
 
 Bundle an **optional local LLM agent** so Firepit becomes truly
 self-contained — workspace *and* brain — and so users without a Claude
@@ -381,7 +381,7 @@ near-term commitment.
 **Operating boundaries (design requirement, not optional polish):** a
 local agent that "can do everything" is the wrong default. The sidecar
 ships with explicit boundaries baked in from the first cut, not bolted on
-later — raised by an external contributor on [issue #10](https://github.com/chloe-dream/firepit-ai/issues/10#issuecomment-4518971610)
+later — raised by an external contributor on [issue #10](https://github.com/SACRVM/firepit-ai/issues/10#issuecomment-4518971610)
 and a clean fit with Firepit's existing posture (per-project shell-command
 trust gate, `confirm:` flags, human-in-the-loop by default):
 
@@ -393,7 +393,7 @@ trust gate, `confirm:` flags, human-in-the-loop by default):
 - A local→cloud (or local→manual) escalation is **logged and
   approval-gated**, never silent. This reuses the "anything that should
   have worked at session start but didn't" diagnostics surface idea from
-  [issue #4](https://github.com/chloe-dream/firepit-ai/issues/4) rather
+  [issue #4](https://github.com/SACRVM/firepit-ai/issues/4) rather
   than inventing a parallel one.
 
 **Out of scope for M8:** multi-model routing, custom fine-tunes / LoRA,
@@ -438,7 +438,7 @@ project knowledge; only the scope *name* ("global") is special-cased.)
 
 The global scope is simply the `.firepit` root helper project's own
 project knowledge — no special case in code. That project is mirrored
-to a private repo ([chloe-dream/.firepit](https://github.com/chloe-dream/.firepit))
+to a private repo ([SACRVM/.firepit](https://github.com/SACRVM/.firepit))
 so general knowledge (e.g. C# know-how) is versioned like everything else.
 
 **Engine — ported (copied, not referenced) from the-fishbowl,** which
@@ -532,11 +532,11 @@ Listed in dependency order so M2-onwards can leave hooks where helpful, not so V
 5. Embedded PowerShell (second pane, reuses ConPTY infrastructure)
 6. Session history dropdown (`--resume <id>` per adapter)
 7. Scrollback restoration (`xterm-addon-serialize`)
-8. **Cross-project auto-delivery (tab-to-tab push)** — remove the manual "Send to Claude" click so an inbox message is injected into the target tab on its own. Design (worked out 2026-07-23, from Chloe's Umbrella-Bot/Bumblebee use case):
-   - **Directional gate, keyed on which tab is focused.** Target is a *background worker* (not the focused tab) → deliver an "act on it" prompt; it just executes the dispatched task. Target is *Chloe's active/focused tab* → deliver a "present it and wait for her go" prompt; her active tab is the only human gate.
+8. **Cross-project auto-delivery (tab-to-tab push)** — remove the manual "Send to Claude" click so an inbox message is injected into the target tab on its own. Design (worked out 2026-07-23, from SACRVM's Umbrella-Bot/Bumblebee use case):
+   - **Directional gate, keyed on which tab is focused.** Target is a *background worker* (not the focused tab) → deliver an "act on it" prompt; it just executes the dispatched task. Target is *SACRVM's active/focused tab* → deliver a "present it and wait for her go" prompt; her active tab is the only human gate.
    - **The circuit breaker is free:** everything that returns to her active tab is laid before her, so every chain closes at her. No separate loop-guard needed as long as the initiating trigger is always hers.
    - **Mechanism reuses what exists:** same PTY-stdin injection path as "Send to Claude", just automated; two prompt flavors (execute vs. present-and-wait); deliver only to an **open + idle** tab (never mid-turn); the inbox stays the durable transport and the fallback when no tab is open or the target is busy. Stays transparent-host — the receiving *agent* does the asking, Firepit builds no confirmation dialog and parses no output.
-   - **One open edge for later:** worker-triggers-worker fan-out (a worker sending onward without routing through Chloe) is the only place a guard would eventually be wanted. First cut: a worker executes only the dispatched task and reports back — no further fan-out.
+   - **One open edge for later:** worker-triggers-worker fan-out (a worker sending onward without routing through SACRVM) is the only place a guard would eventually be wanted. First cut: a worker executes only the dispatched task and reports back — no further fan-out.
 9. **Family-shared always-on core (opt-in)** — filed 2026-07-21 by the `just-play` agent via inbox. A project family (JUST suite: `just-play`, `just-edit`, `just-knowledge`, …) shares ONE always-on reflex doc; today that is N hand-pinned copies across N knowledge scopes, and copies drift. Wanted: one editable source of truth whose edits reach every consumer. Two candidate shapes: (a) a per-project flag "also inline these named global/family pins into my digest", or (b) a blueprint-managed shared doc.
    - **⚠ Hard constraint (must survive any design):** `knowledge-pinned.md` is a *committed* digest, and some family members are *public* repos while the shared core contains personal/identity content. The mechanism must never force that content into a committed file of a public repo. Acceptable outs: a flagged-public project compiles the shared core into a local-only, gitignored digest (agent still gets it on disk), or inlining is gated to a declared public-safe subset. `just-play` is safe today only because `.firepit/` is blanket-gitignored there — any shared-core feature must preserve that "consume locally, never commit" property.
    - Priority low: manual per-project pinning works; recorded so need + constraint predate the family growing.

@@ -61,7 +61,7 @@ dotnet run --project tools/init-project -- <project-slug>
 
 The tool prints a `cmdkey` line and an `mcpOverrides` snippet. Apply both, then `firepit_reload(projectName, restart: true)` and Fishbowl's MCP shows up in that project's session, scoped to that team's data.
 
-See [`docs/FISHBOWL.md`](https://github.com/chloe-dream/firepit-ai/blob/main/docs/FISHBOWL.md) in the firepit-ai repo for the full integration writeup.
+See [`docs/FISHBOWL.md`](https://github.com/SACRVM/firepit-ai/blob/main/docs/FISHBOWL.md) in the firepit-ai repo for the full integration writeup.
 
 ## Folders
 

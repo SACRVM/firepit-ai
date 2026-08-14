@@ -5,7 +5,7 @@ argument-hint: [release|nobuild|clean|combinations]
 
 # /run — build + launch Firepit
 
-You are launching Firepit for Chloe to test. Use the repo-root `run.ps1`
+You are launching Firepit for SACRVM to test. Use the repo-root `run.ps1`
 script — never invoke `dotnet build` + `Firepit.exe` yourself, because the
 build output path moved in V1.12 and the old TFM-suffixed paths still exist
 on disk and trap unwary launches.
@@ -37,8 +37,8 @@ Combinations are allowed: `release clean` → `./run.ps1 -Release -Clean`.
 Parse `$ARGUMENTS`:
 - Split on whitespace, lowercase each token.
 - Build the PowerShell switch list. Reject unknown tokens with a one-line
-  error to Chloe (in German) and stop. Do NOT silently drop unknowns.
-- If both `nobuild` and `clean` appear, stop and ask Chloe which one she
+  error to SACRVM (in German) and stop. Do NOT silently drop unknowns.
+- If both `nobuild` and `clean` appear, stop and ask SACRVM which one she
   meant — they're mutually exclusive in intent.
 
 ## Step 2 — run the script
@@ -58,7 +58,7 @@ elsewhere in this repo.)
 
 ## Step 3 — report
 
-Tell Chloe in German what happened, terse:
+Tell SACRVM in German what happened, terse:
 
 - If build failed: paste the last ~10 lines of the build error output and
   stop. Do not try to "fix" the build — just surface it.
@@ -66,14 +66,14 @@ Tell Chloe in German what happened, terse:
 - If `-NoBuild` and the exe was missing: report it and suggest dropping the
   `nobuild` flag.
 
-Never poll for the app to finish. The launch is fire-and-forget; Chloe will
+Never poll for the app to finish. The launch is fire-and-forget; SACRVM will
 close the window when she's done.
 
 ## Hard rules
 
 - Always invoke `run.ps1`. Never `dotnet build` + manual `Firepit.exe` start
   inline — that's exactly the trap this command exists to remove.
-- If `run.ps1` doesn't exist at the repo root, stop and tell Chloe — don't
+- If `run.ps1` doesn't exist at the repo root, stop and tell SACRVM — don't
   reinvent it inline.
 - Don't add new switches to `run.ps1` from inside `/run` — if she asks for a
   new flag, edit `run.ps1` separately and update this command afterwards.

@@ -19,10 +19,10 @@
 AppId={{8E0E9F4C-5C9A-4A3E-9F5A-FIREPITAPPID01}}
 AppName=Firepit
 AppVersion={#AppVersion}
-AppPublisher=Chloe Bernette
-AppPublisherURL=https://github.com/chloe-dream/firepit-ai
-AppSupportURL=https://github.com/chloe-dream/firepit-ai/issues
-AppUpdatesURL=https://github.com/chloe-dream/firepit-ai/releases
+AppPublisher=SACRVM
+AppPublisherURL=https://github.com/SACRVM/firepit-ai
+AppSupportURL=https://github.com/SACRVM/firepit-ai/issues
+AppUpdatesURL=https://github.com/SACRVM/firepit-ai/releases
 DefaultDirName={localappdata}\Programs\Firepit
 DefaultGroupName=Firepit
 DisableProgramGroupPage=yes

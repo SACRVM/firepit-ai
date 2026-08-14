@@ -489,7 +489,7 @@ Single JSON file at `%APPDATA%\Firepit\settings.json`:
   },
   "quickLinks": [
     // Global templated defaults. Per-project entries can extend or disable these.
-    { "name": "GitHub",   "url": "https://github.com/chloe-dream/{projectName}", "target": "external" },
+    { "name": "GitHub",   "url": "https://github.com/SACRVM/{projectName}", "target": "external" },
     { "name": "Fishbowl", "url": "https://localhost:7180/p/{projectName}",       "target": "external" }
   ],
   "projects": [
