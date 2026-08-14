@@ -113,7 +113,7 @@ Catches compile errors locally before the tag goes out. If it fails, **stop**, s
 ## Step 7 — Commit, tag, push
 
 ```bash
-git add src/Firepit/Firepit.csproj installer/firepit.iss
+git add src/Firepit/Firepit.csproj tools/firepit-mcp/Firepit.Mcp.Bridge.csproj installer/firepit.iss
 git commit -m "release: vNEW"
 git tag vNEW
 git push origin main

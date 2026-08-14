@@ -5,6 +5,15 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-08-14
+
+### Changed
+
+- **The GitHub account behind Firepit is now `github.com/SACRVM`.** The
+  in-app update check, the meta-project CLAUDE.md template, the
+  installer's publisher/support/updates URLs and the About byline all
+  point there directly — no reliance on GitHub's rename redirect.
+
 ### Fixed
 
 - **MCP tools no longer vanish in the ninth tab.** The named-pipe host
