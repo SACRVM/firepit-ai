@@ -6,7 +6,7 @@ argument-hint: [test|patch|minor|major|<x.y.z>]
 # /release — cut a Firepit release
 
 You are cutting a Firepit release. Follow these steps **exactly**, in order.
-**Never skip the confirmation step.** Speak to Chloe in German; commit
+**Never skip the confirmation step.** Speak to SACRVM in German; commit
 messages and tag names stay English.
 
 The release pipeline produces two artifacts from a single `v*` tag push:
@@ -26,7 +26,7 @@ Both attach to the GitHub Release the workflow creates from the tag.
 
 ## Step 1 — Sanity checks
 
-Run all four. If any fails, stop and report to Chloe — do not proceed.
+Run all four. If any fails, stop and report to SACRVM — do not proceed.
 
 ```bash
 git rev-parse --abbrev-ref HEAD                                    # must be 'main'
@@ -63,7 +63,7 @@ Compute `new_version` from the **csproj `<Version>`** (not from the tag — they
 
 ## Step 4 — Show the plan, ask for confirmation
 
-Print to Chloe in German, exactly like:
+Print to SACRVM in German, exactly like:
 
 ```
 Letzter Tag:           v0.1.0
@@ -76,7 +76,7 @@ Neuer Tag:             v0.2.0
 
 Then list the commits since the last tag, grouped by prefix (V1.x / feat / fix / chore / docs / refactor / build / other), as a sanity check.
 
-**If `$ARGUMENTS` is `test`: stop here. Do not change any files. Tell Chloe „Trockenlauf — nichts geändert."**
+**If `$ARGUMENTS` is `test`: stop here. Do not change any files. Tell SACRVM „Trockenlauf — nichts geändert."**
 
 Otherwise: ask **„OK so? [j/n]"** and wait for her answer.
 - `j` / `ja` / `y` / `yes` → continue to Step 5
@@ -85,6 +85,10 @@ Otherwise: ask **„OK so? [j/n]"** and wait for her answer.
 ## Step 5 — Bump csproj version
 
 Edit `src/Firepit/Firepit.csproj`: change `<Version>OLD</Version>` to `<Version>NEW</Version>`. Use the Edit tool with the full surrounding `<Version>…</Version>` string for uniqueness.
+
+Do the same in `tools/firepit-mcp/Firepit.Mcp.Bridge.csproj` — the bridge exe
+carries its own version resource, and a stale one makes `firepit-mcp.exe`
+report a different version than the MCP handshake does.
 
 Also update the installer fallback in `installer/firepit.iss`:
 
@@ -102,7 +106,7 @@ Also update the installer fallback in `installer/firepit.iss`:
 dotnet build Firepit.slnx --configuration Release --nologo
 ```
 
-Catches compile errors locally before the tag goes out. If it fails, **stop**, show the error to Chloe, leave the working tree as-is so she can inspect — do not commit, do not tag, do not push.
+Catches compile errors locally before the tag goes out. If it fails, **stop**, show the error to SACRVM, leave the working tree as-is so she can inspect — do not commit, do not tag, do not push.
 
 (The release workflow runs `dotnet test` on the runner, so we skip the test pass here for speed. If she wants the full gate locally, she can run `dotnet test` manually before invoking `/release`.)
 
@@ -120,7 +124,7 @@ Use the standard commit-message HEREDOC pattern; include the `Co-Authored-By` tr
 
 ## Step 8 — Hand off
 
-Tell Chloe in German:
+Tell SACRVM in German:
 
 ```
 Release vNEW ist raus.
@@ -128,7 +132,7 @@ Release vNEW ist raus.
 - Single-file Firepit.exe (~160 MB) wird publishd, gezippt und an Release angehängt
 - Inno Setup installer wird via choco+ISCC gebaut und ebenfalls angehängt
 - GitHub Release wird automatisch erstellt mit auto-generated release notes
-- CI-Status: https://github.com/chloe-dream/firepit-ai/actions
+- CI-Status: https://github.com/SACRVM/firepit-ai/actions
 ```
 
 Do **not** poll or wait for the CI run — just hand off.
@@ -139,4 +143,4 @@ Do **not** poll or wait for the CI run — just hand off.
 - Never use `--no-verify` or `--force` on any git command.
 - Never touch `.csproj` fields other than `<Version>`.
 - The `/release` invocation is the explicit user authorization for the tag push and the public GitHub Release that follows.
-- If anything is unclear or smells wrong (e.g., no commits since last tag, csproj/tag version mismatch, weird state), stop and ask Chloe instead of guessing.
+- If anything is unclear or smells wrong (e.g., no commits since last tag, csproj/tag version mismatch, weird state), stop and ask SACRVM instead of guessing.

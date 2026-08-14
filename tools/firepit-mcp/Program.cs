@@ -20,7 +20,7 @@ try
     }
     catch (TimeoutException)
     {
-        await EmitFatalAsync("Firepit GUI is not running. Start Firepit and try again.");
+        await EmitFatalAsync(DescribeConnectTimeout());
         return 1;
     }
 
@@ -55,6 +55,30 @@ catch (Exception ex)
 {
     await EmitFatalAsync($"firepit-mcp internal error: {ex.Message}");
     return 1;
+}
+
+// ConnectAsync throws the same TimeoutException whether the pipe does not
+// exist at all or exists with every instance already taken. Guessing "GUI is
+// not running" for both is what made slot exhaustion read as a random defect
+// for months — so look before reporting.
+static string DescribeConnectTimeout()
+{
+    bool pipeExists;
+    try
+    {
+        pipeExists = Directory.EnumerateFiles(@"\\.\pipe\")
+            .Any(p => string.Equals(Path.GetFileName(p), PipeName, StringComparison.OrdinalIgnoreCase));
+    }
+    catch
+    {
+        // Can't enumerate — fall back to the old assumption rather than lie
+        // in the other direction.
+        pipeExists = false;
+    }
+
+    return pipeExists
+        ? "Firepit is running, but all of its MCP connection slots are in use. Close a Firepit tab and try again."
+        : "Firepit GUI is not running. Start Firepit and try again.";
 }
 
 static async Task PumpStdinToPipeAsync(Stream stdin, Stream pipe)

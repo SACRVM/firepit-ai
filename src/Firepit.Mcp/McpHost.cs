@@ -17,13 +17,31 @@ namespace Firepit.Mcp;
 public sealed class McpHost : IDisposable
 {
     public const string PipeName    = "firepit-mcp";
-    public const int    MaxClients  = 8;
+
+    /// <summary>
+    /// Total <see cref="NamedPipeServerStream"/> instances Windows will hand
+    /// out for <see cref="PipeName"/> — i.e. the hard ceiling on concurrent
+    /// agent sessions. Windows allows up to 254; one tab holds one slot for
+    /// its whole lifetime, so this needs headroom well past the tab count.
+    /// </summary>
+    public const int    MaxClients  = 64;
+
+    /// <summary>
+    /// How many accept loops stay posted. Each accepts, hands the client off
+    /// to a worker task, and immediately posts a fresh listener — so this is
+    /// only a burst backlog (all tabs reconnecting at once on restore), not
+    /// the client limit.
+    /// </summary>
+    public const int    ListenerBacklog = 4;
+
     public const string Protocol    = "2024-11-05";
     public const string ServerName  = "firepit";
 
     private readonly IMcpBackend _backend;
     private readonly string      _serverVersion;
     private readonly CancellationTokenSource _cts = new();
+    private int  _activeClients;
+    private int  _exhaustionLogged;
     private bool _disposed;
 
     public McpHost(IMcpBackend backend, string serverVersion = "0.5.0")
@@ -34,11 +52,13 @@ public sealed class McpHost : IDisposable
 
     public void Start()
     {
-        for (var i = 0; i < MaxClients; i++)
+        for (var i = 0; i < ListenerBacklog; i++)
         {
             _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
         }
-        Log.Information("MCP host listening on pipe '{Pipe}' ({Max} concurrent)", PipeName, MaxClients);
+        Log.Information(
+            "MCP host listening on pipe '{Pipe}' ({Backlog} listeners, {Max} concurrent clients)",
+            PipeName, ListenerBacklog, MaxClients);
     }
 
     public void Dispose()
@@ -53,29 +73,84 @@ public sealed class McpHost : IDisposable
     {
         while (!ct.IsCancellationRequested)
         {
-            NamedPipeServerStream? pipe = null;
+            NamedPipeServerStream pipe;
             try
             {
                 pipe = new NamedPipeServerStream(
                     PipeName, PipeDirection.InOut, MaxClients,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                await pipe.WaitForConnectionAsync(ct);
-                Log.Debug("MCP client connected");
-                await HandleClientAsync(pipe, ct);
             }
-            catch (OperationCanceledException) { return; }
             catch (IOException ex)
             {
-                Log.Debug(ex, "MCP pipe IO ended (client disconnect or shutdown)");
+                // Every pipe instance is held by a connected client. Windows
+                // refuses the new instance here, so a starting bridge just
+                // times out with nothing on our side to explain it — log it
+                // once per exhaustion episode, then wait for a slot.
+                if (Interlocked.Exchange(ref _exhaustionLogged, 1) == 0)
+                {
+                    Log.Warning(ex,
+                        "MCP pipe instances exhausted — all {Max} slots are in use, new agent sessions cannot attach until a tab closes",
+                        MaxClients);
+                }
+                try { await Task.Delay(1_000, ct); } catch (OperationCanceledException) { return; }
+                continue;
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "MCP pipe accept-loop error");
+                Log.Warning(ex, "MCP pipe listener could not be created");
+                try { await Task.Delay(1_000, ct); } catch (OperationCanceledException) { return; }
+                continue;
             }
-            finally
+
+            try
             {
-                try { pipe?.Dispose(); } catch { /* ignored */ }
+                await pipe.WaitForConnectionAsync(ct);
             }
+            catch (OperationCanceledException)
+            {
+                try { pipe.Dispose(); } catch { /* ignored */ }
+                return;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "MCP pipe accept error");
+                try { pipe.Dispose(); } catch { /* ignored */ }
+                continue;
+            }
+
+            // Hand the connected client to a worker and loop straight back to
+            // post a fresh listener. Serving it inline (pre-v0.11.2) meant a
+            // loop stopped listening for the entire lifetime of the session it
+            // accepted — with every loop occupied, the next tab's bridge hit
+            // its connect timeout with no listener left to answer it.
+            var accepted = pipe;
+            var active = Interlocked.Increment(ref _activeClients);
+            Log.Debug("MCP client connected ({Active}/{Max})", active, MaxClients);
+            _ = Task.Run(() => ServeClientAsync(accepted, ct), CancellationToken.None);
+        }
+    }
+
+    private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    {
+        try
+        {
+            await HandleClientAsync(pipe, ct);
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (IOException ex)
+        {
+            Log.Debug(ex, "MCP pipe IO ended (client disconnect or shutdown)");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "MCP client handler error");
+        }
+        finally
+        {
+            try { pipe.Dispose(); } catch { /* ignored */ }
+            var active = Interlocked.Decrement(ref _activeClients);
+            Interlocked.Exchange(ref _exhaustionLogged, 0);
+            Log.Debug("MCP client disconnected ({Active}/{Max})", active, MaxClients);
         }
     }
 

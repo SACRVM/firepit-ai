@@ -5,6 +5,37 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP tools no longer vanish in the ninth tab.** The named-pipe host
+  posted 8 accept loops, but a loop only created its replacement listener
+  *after* the client it accepted disconnected — and an agent session holds
+  its slot for the whole life of the tab. So the pool of listening
+  instances shrank with every open session, and once eight were connected
+  nothing was listening: the next tab's `firepit-mcp` bridge timed out and
+  that session came up with zero `firepit_*` tools. Accepted clients are
+  now served on their own task and the loop immediately re-posts a
+  listener; the instance ceiling went 8 → 64, and exhaustion is logged as
+  a warning instead of being invisible above the OS layer.
+- **`firepit-mcp` stopped blaming the wrong thing on connect timeout.**
+  `ConnectAsync` throws the same `TimeoutException` for "pipe doesn't
+  exist" and "every instance is busy"; the bridge reported *"Firepit GUI
+  is not running"* for both, which is what disguised the slot exhaustion
+  above as a random defect. It now checks whether the pipe exists and says
+  so: *"Firepit is running, but all of its MCP connection slots are in
+  use."*
+- **`firepit-mcp.exe`'s file-version resource** was pinned at `0.5.0`
+  while the MCP handshake reported the real version. Bumped, and
+  `/release` now keeps both csproj versions in sync.
+
+### Removed
+
+- **The one-shot v0.5.16 legacy quick-link strip** (issue #14). It matched
+  the two pre-v0.5.0 seeded quick-links by their exact literal URLs; six
+  minor versions on, every live install has long since run it. Upgrading
+  from a pre-v0.5.16 build now simply keeps those two entries — remove
+  them via Settings → Quick-links.
+
 ## [0.5.20] — 2026-05-18
 
 ### Fixed
@@ -160,7 +191,7 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   every WPF context menu (tab strip, etc.).
 - **Stripped two legacy default quick-links** that pre-v0.5.0 Firepit
   hardcoded into every settings.json (issue #14):
-  `github.com/chloe-dream/{projectName}` and `localhost:7180/p/{projectName}`.
+  `github.com/SACRVM/{projectName}` and `localhost:7180/p/{projectName}`.
   Both pointed at non-default infrastructure (maintainer's org / a
   soft-wired optional integration that needs per-project provisioning).
   The strip only removes entries whose name+url exactly match the known
@@ -421,7 +452,7 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   generic chain-link fallback. Root cause: resource-key case mismatch
   (`IconGitHub` vs the `Capitalise()`-normalised lookup `IconGithub`).
 - **Personal GitHub/Fishbowl URLs removed from `FirepitSettings.Defaults`.**
-  Previously the defaults shipped with `github.com/chloe-dream/{projectName}`
+  Previously the defaults shipped with `github.com/SACRVM/{projectName}`
   and `localhost:7180/p/{projectName}` — author-specific config that
   shouldn't have leaked into the OSS defaults. QuickLinks now start empty;
   configure via `settings.json` globals or per-project `.firepit/config.json`.

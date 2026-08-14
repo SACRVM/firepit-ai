@@ -12,7 +12,11 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishTrimmed>false</PublishTrimmed>
-    <Version>0.5.0</Version>
+    <!-- Keep in sync with src/Firepit/Firepit.csproj — /release bumps both.
+         A stale value here makes firepit-mcp.exe's file-version resource
+         disagree with the version the MCP handshake reports, which sends
+         diagnostics down the wrong path. -->
+    <Version>0.11.1</Version>
     <!-- Land alongside Firepit.exe so the installer can pick both up
          from the same publish dir. -->
     <PublishDir>$(MSBuildThisFileDirectory)..\..\bin\$(RuntimeIdentifier)\</PublishDir>
