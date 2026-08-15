@@ -173,15 +173,35 @@ public partial class InboxWindow : Window
         // One message is not a queue — say what the button will actually do.
         ProcessLabel.Text = _rows.Count == 1 ? "Process" : "Process all";
 
-        var hasSelection = MessageList.SelectedItem is InboxRow;
+        // Say how many rows an action will hit, so a multi-selection can't be
+        // mistaken for a single one right before a delete.
+        var selected = SelectedRows().Count;
+        var suffix = selected > 1 ? $" ({selected})" : string.Empty;
+        DeleteLabel.Text   = "Delete" + suffix;
+        MarkDoneLabel.Text = "Done" + suffix;
+
         ProcessButton.IsEnabled  = _rows.Count > 0;
-        MarkDoneButton.IsEnabled = hasSelection;
-        DeleteButton.IsEnabled   = hasSelection;
+        MarkDoneButton.IsEnabled = selected > 0;
+        // Single-row discard belongs on the row itself, where the hand looks
+        // for it. Down here it only earns its space once a selection spans
+        // more rows than one ✕ can handle.
+        DeleteButton.Visibility = selected > 1 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private List<InboxRow> SelectedRows() =>
+        MessageList.SelectedItems.OfType<InboxRow>().ToList();
 
     private void OnMessageSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        BodyText.Text = (MessageList.SelectedItem as InboxRow)?.Item.Body ?? string.Empty;
+        var selected = SelectedRows();
+        BodyText.Text = selected.Count switch
+        {
+            0 => string.Empty,
+            1 => selected[0].Item.Body,
+            // Showing one body out of several would misrepresent what the
+            // buttons are about to act on.
+            _ => string.Join('\n', selected.Select(r => $"• {r.From} — {r.Subject}")),
+        };
         // Every message starts at the top. Without this, picking a row after
         // scrolling drops you into the middle of the next one.
         BodyText.CaretIndex = 0;
@@ -198,18 +218,21 @@ public partial class InboxWindow : Window
     {
         if (_rows.Count == 0) return;
 
-        // A file REFERENCE, never the body: long multi-line pastes through the
-        // PTY arrive truncated in the agent's prompt (observed in the field —
-        // only the tail survived). The files are already on disk in the project
-        // the session runs in, so a pointer is lossless.
+        // Never the bodies: long multi-line pastes through the PTY arrive
+        // truncated in the agent's prompt (observed in the field — only the
+        // tail survived). So the prompt points at the queue and the agent
+        // fetches it — through MCP, the same surface it completes on.
+        // firepit_inbox_list already returns id, frontmatter and body for every
+        // pending message in one call, which is exactly what this needs.
         var prompt = _rows.Count == 1
-            ? $"Work the message .firepit/inbox/{_rows[0].Item.Id} in your Firepit inbox: "
-            : "Work your Firepit inbox: read every pending message in `.firepit/inbox/*.md` in full, ";
+            ? $"Work the message '{_rows[0].Item.Id}' in your Firepit inbox: read it with the "
+              + "firepit_inbox_list MCP tool, "
+            : "Work your Firepit inbox: read the pending messages with the firepit_inbox_list "
+              + "MCP tool, ";
         prompt +=
-            "act on it, then mark it done with the firepit_inbox_complete MCP tool "
-            + "(id = the message's filename). Stop and ask me first before anything "
-            + "irreversible — deleting or overwriting files, force-pushing, cutting a "
-            + "release, or sending anything outside this machine.";
+            "act on it, then mark it done with firepit_inbox_complete (id = the entry's id). "
+            + "Stop and ask me first before anything irreversible — deleting or overwriting "
+            + "files, force-pushing, cutting a release, or sending anything outside this machine.";
 
         try { _sendToPty(prompt); }
         catch (Exception ex)
@@ -231,71 +254,107 @@ public partial class InboxWindow : Window
 
     private void OnMarkDoneClick(object sender, RoutedEventArgs e)
     {
-        if (MessageList.SelectedItem is not InboxRow row) return;
-        var msg = row.Item;
+        var rows = SelectedRows();
+        if (rows.Count == 0) return;
 
         var processedDir = Path.Combine(_inboxDir, "processed");
-        var target       = Path.Combine(processedDir, msg.Id);
-        try
+        var moved = new List<InboxRow>();
+        foreach (var row in rows)
         {
-            Directory.CreateDirectory(processedDir);
-            if (File.Exists(target))
+            var msg    = row.Item;
+            var target = Path.Combine(processedDir, msg.Id);
+            try
             {
-                var stamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff");
-                var ext   = Path.GetExtension(msg.Id);
-                var stem  = Path.GetFileNameWithoutExtension(msg.Id);
-                target    = Path.Combine(processedDir, $"{stem}-{stamp}{ext}");
+                Directory.CreateDirectory(processedDir);
+                if (File.Exists(target))
+                {
+                    var stamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff");
+                    var ext   = Path.GetExtension(msg.Id);
+                    var stem  = Path.GetFileNameWithoutExtension(msg.Id);
+                    target    = Path.Combine(processedDir, $"{stem}-{stamp}{ext}");
+                }
+                File.Move(msg.FullPath, target);
+                moved.Add(row);
+                Log.Information("Inbox: marked '{Id}' done in {Project}", msg.Id, _projectName);
             }
-            File.Move(msg.FullPath, target);
-            Log.Information("Inbox: marked '{Id}' done in {Project}", msg.Id, _projectName);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Inbox: mark-done failed for {Id}", msg.Id);
-            MessageDialog.Show(this,
-                title: "Could not mark as done",
-                message: ex.Message,
-                primaryLabel: "OK");
-            return;
+            catch (Exception ex)
+            {
+                // Keep going: one locked file shouldn't strand the rest, and
+                // the rows that did move are already gone from disk.
+                Log.Warning(ex, "Inbox: mark-done failed for {Id}", msg.Id);
+                MessageDialog.Show(this,
+                    title: "Could not mark as done",
+                    message: $"{msg.Subject ?? msg.Id}\n\n{ex.Message}",
+                    primaryLabel: "OK");
+            }
         }
 
-        RemoveRow(row);
+        RemoveRows(moved);
     }
 
-    private void OnDeleteClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The row's own discard button — where the hand goes looking for it. Acts
+    /// on that row alone, regardless of what else happens to be selected.
+    /// </summary>
+    private void OnRowDeleteClick(object sender, RoutedEventArgs e)
     {
-        if (MessageList.SelectedItem is not InboxRow row) return;
-        var msg = row.Item;
+        e.Handled = true;
+        if (sender is FrameworkElement { DataContext: InboxRow row })
+        {
+            DeleteRows([row]);
+        }
+    }
+
+    private void OnDeleteClick(object sender, RoutedEventArgs e) => DeleteRows(SelectedRows());
+
+    private void DeleteRows(List<InboxRow> rows)
+    {
+        if (rows.Count == 0) return;
+
+        // Name what is about to go. For a handful, list them — the subject is
+        // the only thing that distinguishes one message from another.
+        var what = rows.Count == 1
+            ? $"\"{rows[0].Subject}\""
+            : string.Join('\n', rows.Take(8).Select(r => $"  • {r.Subject}"))
+              + (rows.Count > 8 ? $"\n  … and {rows.Count - 8} more" : string.Empty);
 
         var confirmed = MessageDialog.Show(this,
-            title: "Delete this message?",
-            message: $"Permanently delete \"{msg.Subject ?? "(no subject)"}\" from {_projectName}'s inbox?",
+            title: rows.Count == 1 ? "Delete this message?" : $"Delete {rows.Count} messages?",
+            message: $"{what}\n\nThe files are removed from {_projectName}'s inbox. This cannot be undone.",
             primaryLabel: "Delete",
             secondaryLabel: "Cancel");
         if (!confirmed) return;
 
-        try
+        var deleted = new List<InboxRow>();
+        foreach (var row in rows)
         {
-            File.Delete(msg.FullPath);
-            Log.Information("Inbox: deleted '{Id}' from {Project}", msg.Id, _projectName);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Inbox: delete failed for {Id}", msg.Id);
-            MessageDialog.Show(this,
-                title: "Could not delete",
-                message: ex.Message,
-                primaryLabel: "OK");
-            return;
+            try
+            {
+                File.Delete(row.Item.FullPath);
+                deleted.Add(row);
+                Log.Information("Inbox: deleted '{Id}' from {Project}", row.Item.Id, _projectName);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Inbox: delete failed for {Id}", row.Item.Id);
+                MessageDialog.Show(this,
+                    title: "Could not delete",
+                    message: $"{row.Subject}\n\n{ex.Message}",
+                    primaryLabel: "OK");
+            }
         }
 
-        RemoveRow(row);
+        RemoveRows(deleted);
     }
 
-    private void RemoveRow(InboxRow row)
+    private void RemoveRows(List<InboxRow> rows)
     {
-        var index = _rows.IndexOf(row);
-        _rows.Remove(row);
+        if (rows.Count == 0) return;
+        var index = _rows.IndexOf(rows[0]);
+        foreach (var row in rows)
+        {
+            _rows.Remove(row);
+        }
         if (_rows.Count == 0)
         {
             Close();
@@ -312,6 +371,14 @@ public partial class InboxWindow : Window
         if (e.Key == Key.Escape)
         {
             Close();
+            e.Handled = true;
+            return;
+        }
+        // Only from the list: pressing Delete while reading a body shouldn't
+        // put a delete prompt on screen. Still goes through the confirm.
+        if (e.Key == Key.Delete && MessageList.IsKeyboardFocusWithin && SelectedRows().Count > 0)
+        {
+            OnDeleteClick(this, new RoutedEventArgs());
             e.Handled = true;
         }
     }

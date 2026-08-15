@@ -76,6 +76,47 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- Per-row discard. Hidden rather than collapsed so revealing it never
+             shifts the row's layout, and so it can't be clicked while unseen. -->
+        <Style x:Key="InboxRowDelete" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#7A6F60" />
+            <Setter Property="FontFamily" Value="Cascadia Code, Consolas, Courier New" />
+            <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
+            <Setter Property="Padding" Value="7,1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Visibility" Value="Hidden" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#E58A78" />
+                                <Setter Property="Background" Value="#2E211C" TargetName="Bd" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Value="True"
+                             Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Value="True"
+                             Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -115,6 +156,7 @@
                  BorderThickness="0"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 SelectionMode="Extended"
                  SelectionChanged="OnMessageSelected">
             <ListBox.ItemContainerStyle>
                 <Style TargetType="ListBoxItem">
@@ -152,6 +194,7 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
                                    Text="●"
@@ -182,6 +225,14 @@
                                    FontSize="{DynamicResource SmallFontSize}"
                                    VerticalAlignment="Center"
                                    Margin="12,0,0,0" />
+                        <Button Grid.Column="4"
+                                Style="{StaticResource InboxRowDelete}"
+                                Click="OnRowDeleteClick"
+                                VerticalAlignment="Center"
+                                Margin="10,0,0,0"
+                                ToolTip="Discard this message">
+                            <TextBlock Text="✕" />
+                        </Button>
                     </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
@@ -231,14 +282,14 @@
                         Style="{StaticResource InboxDangerButton}"
                         Margin="0,0,6,0"
                         Click="OnDeleteClick"
-                        ToolTip="Delete the selected message (removes the file)">
-                    <TextBlock Text="Delete" />
+                        ToolTip="Delete the selected messages — removes the files. Ctrl- or Shift-click to select several.">
+                    <TextBlock x:Name="DeleteLabel" Text="Delete" />
                 </Button>
                 <Button x:Name="MarkDoneButton"
                         Style="{StaticResource InboxButton}"
                         Click="OnMarkDoneClick"
-                        ToolTip="Move the selected message to inbox/processed/ without acting on it">
-                    <TextBlock Text="Done" />
+                        ToolTip="Move the selected messages to inbox/processed/ without acting on them">
+                    <TextBlock x:Name="MarkDoneLabel" Text="Done" />
                 </Button>
             </StackPanel>
         </Grid>
