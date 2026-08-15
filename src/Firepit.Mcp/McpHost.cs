@@ -391,6 +391,10 @@ public sealed class McpHost : IDisposable
                 if (string.IsNullOrEmpty(project))
                     return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
                 var result = await _backend.ListInboxAsync(project);
+                // A listing that couldn't be produced must not come back as an
+                // empty one — the caller would read it as "nothing waiting".
+                if (result.Error is { Length: > 0 } err)
+                    return BuildErrorResponse(id, -32602, err);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.InboxListResult)));
             }
             case "firepit_inbox_complete":
@@ -457,6 +461,8 @@ public sealed class McpHost : IDisposable
                 if (string.IsNullOrEmpty(projectName))
                     return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
                 var result = await _backend.ListProjectCommandsAsync(projectName);
+                if (result.Error is { Length: > 0 } err)
+                    return BuildErrorResponse(id, -32602, err);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.CommandListResult)));
             }
             case "firepit_remove_command":
@@ -599,6 +605,8 @@ public sealed class McpHost : IDisposable
                 if (string.IsNullOrEmpty(project))
                     return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
                 var result = await _backend.ListArtifactsAsync(project);
+                if (result.Error is { Length: > 0 } err)
+                    return BuildErrorResponse(id, -32602, err);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ArtifactListResult)));
             }
             default:

@@ -39,7 +39,14 @@ public sealed record InboxMessage(
 
 public sealed record InboxListResult(
     string Project,
-    IReadOnlyList<InboxMessage> Messages);
+    IReadOnlyList<InboxMessage> Messages,
+    /// <summary>
+    /// Set when the listing could not be produced at all — an unknown project,
+    /// above all. An empty <c>Messages</c> must only ever mean "nothing is
+    /// waiting"; a caller cannot tell a misaddressed request from a clear
+    /// inbox, and an agent that believes the latter stops looking.
+    /// </summary>
+    string? Error = null);
 
 /// <summary>One toolbar command as exposed by firepit_list_commands. Mirrors
 /// ProjectCommand but flattens the type discriminator to a string and drops
@@ -64,7 +71,9 @@ public sealed record CommandSummary(
 
 public sealed record CommandListResult(
     string Project,
-    IReadOnlyList<CommandSummary> Commands);
+    IReadOnlyList<CommandSummary> Commands,
+    /// <summary>See <see cref="InboxListResult.Error"/> — empty must mean empty.</summary>
+    string? Error = null);
 
 /// <summary>
 /// Payload for firepit_add_command. Mirrors ProjectCommand 1:1 but uses string
@@ -192,7 +201,9 @@ public sealed record ArtifactSummary(
 
 public sealed record ArtifactListResult(
     string Project,
-    IReadOnlyList<ArtifactSummary> Artifacts);
+    IReadOnlyList<ArtifactSummary> Artifacts,
+    /// <summary>See <see cref="InboxListResult.Error"/> — empty must mean empty.</summary>
+    string? Error = null);
 
 // Resource definition returned by resources/list. Tool definitions live as
 // internal records next to the catalog (McpToolDefinitionRaw) — they carry

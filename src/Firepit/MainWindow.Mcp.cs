@@ -290,7 +290,8 @@ public partial class MainWindow : IMcpBackend
             var project = FindProjectByName(projectName);
             if (project is null)
             {
-                return new InboxListResult(projectName, Array.Empty<InboxMessage>());
+                return new InboxListResult(
+                    projectName, Array.Empty<InboxMessage>(), UnknownProject(projectName));
             }
 
             var inboxDir = Path.Combine(project.Path, ".firepit", "inbox");
@@ -501,7 +502,8 @@ public partial class MainWindow : IMcpBackend
         {
             var project = FindProjectByName(projectName);
             if (project is null)
-                return new CommandListResult(projectName, Array.Empty<CommandSummary>());
+                return new CommandListResult(
+                    projectName, Array.Empty<CommandSummary>(), UnknownProject(projectName));
 
             var config   = SafeLoadProjectConfig(project.Path);
             var commands = config?.Commands ?? Array.Empty<ProjectCommand>();
@@ -633,7 +635,9 @@ public partial class MainWindow : IMcpBackend
         OnDispatcherAsync(() =>
         {
             var project = FindProjectByName(projectName);
-            if (project is null) return new ArtifactListResult(projectName, Array.Empty<ArtifactSummary>());
+            if (project is null)
+                return new ArtifactListResult(
+                    projectName, Array.Empty<ArtifactSummary>(), UnknownProject(projectName));
 
             IReadOnlyList<ArtifactEntry> entries;
             try
@@ -720,8 +724,34 @@ public partial class MainWindow : IMcpBackend
 
     // --- helpers --------------------------------------------------------
 
-    private Firepit.Core.Projects.Project? FindProjectByName(string name) =>
-        _allProjects.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Resolve a project by the name a caller uses for it — the registry name,
+    /// or the <c>id</c> its own <c>.firepit/config.json</c> declares.
+    ///
+    /// Both are needed because they are allowed to differ. The registry keys on
+    /// the folder name, while <see cref="SessionTab"/> exports
+    /// <c>FIREPIT_PROJECT_NAME</c> from the configured <c>id</c> when one is
+    /// set — so an agent in such a project knows itself by a name the registry
+    /// has never heard of, and every tool with a projectName parameter turns
+    /// into a trap for it, its own default path included. The meta project is
+    /// the live example: folder <c>.firepit</c>, id <c>firepit-central</c>.
+    /// </summary>
+    private Firepit.Core.Projects.Project? FindProjectByName(string name)
+    {
+        var byName = _allProjects.FirstOrDefault(
+            p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (byName is not null) return byName;
+
+        // Second pass only on a miss: reads config files, and the registry name
+        // is what nearly every caller passes.
+        return _allProjects.FirstOrDefault(p =>
+            SafeLoadProjectConfig(p.Path)?.Id is { Length: > 0 } id
+            && string.Equals(id, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string UnknownProject(string name) =>
+        $"Unknown project: '{name}'. Pass a name from firepit_list_projects, "
+        + "or the id declared in that project's .firepit/config.json.";
 
     private static string SafeSlug(string input)
     {
