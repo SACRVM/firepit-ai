@@ -94,6 +94,10 @@ public static class ProjectScaffolding
             projectPath,
             Blueprints.FirepitBlueprintDefaults.PinnedSectionMarker,
             Blueprints.FirepitBlueprintDefaults.PinnedSection);
+        claudeSeeded |= EnsureClaudeMdSection(
+            projectPath,
+            Blueprints.FirepitBlueprintDefaults.ArtifactsSectionMarker,
+            Blueprints.FirepitBlueprintDefaults.ArtifactsSection);
         EnsureKnowledgeReadme(projectPath);
         EnsurePinnedDigestSeed(projectPath);
         var blanket          = DetectBlanketIgnores(projectPath);

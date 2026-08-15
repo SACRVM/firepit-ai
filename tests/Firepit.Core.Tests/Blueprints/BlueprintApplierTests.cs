@@ -64,7 +64,7 @@ public sealed class BlueprintApplierTests : IDisposable
         Assert.Contains(".firepit/knowledge/README.md", check.MissingFiles);
         Assert.Contains(".firepit/knowledge-pinned.md", check.MissingFiles);
         Assert.NotEmpty(check.MissingGitignoreLines);
-        Assert.Equal(3, check.MissingClaudeMdSections.Count);
+        Assert.Equal(4, check.MissingClaudeMdSections.Count);
         Assert.NotEmpty(check.DescribePending());
     }
 

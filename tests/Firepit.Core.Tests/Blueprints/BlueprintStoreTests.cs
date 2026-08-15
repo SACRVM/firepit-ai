@@ -59,7 +59,7 @@ public sealed class BlueprintStoreTests : IDisposable
         Assert.Equal("firepit", blueprint.Name);
         Assert.True(blueprint.EnsureProjectConfig);
         Assert.Equal(ProjectScaffolding.GitignoreEntries, blueprint.GitignoreLines);
-        Assert.Equal(3, blueprint.ClaudeMdSections.Count);
+        Assert.Equal(4, blueprint.ClaudeMdSections.Count);
         Assert.Equal(2, blueprint.Files.Count);
         var relPaths = blueprint.Files.Select(f => f.RelativePath).ToArray();
         Assert.Contains(".firepit/knowledge/README.md", relPaths);
@@ -67,21 +67,62 @@ public sealed class BlueprintStoreTests : IDisposable
     }
 
     [Fact]
-    public void EnsureDefaults_NeverOverwritesAnEditedManifest()
+    public void EnsureDefaults_AtCurrentVersion_LeavesAnEditedManifestByteIdentical()
     {
         var store = new BlueprintStore(_root);
         store.EnsureDefaults();
         var manifestPath = Path.Combine(_root, ".firepit", "blueprints", "firepit", "blueprint.json");
-        var edited = """{ "version": 1, "description": "my edit", "ensureProjectConfig": false }""";
+        var edited = $$"""
+            { "version": {{BlueprintStore.CurrentManifestVersion}}, "description": "my edit", "ensureProjectConfig": false }
+            """;
         File.WriteAllText(manifestPath, edited);
 
         store.EnsureDefaults();
 
+        // A manifest already at the current version is the user's alone —
+        // including the sections they deleted. Nothing is added back.
         Assert.Equal(edited, File.ReadAllText(manifestPath));
         var blueprint = store.TryLoad("firepit");
         Assert.NotNull(blueprint);
         Assert.Equal("my edit", blueprint.Description);
         Assert.False(blueprint.EnsureProjectConfig);
+        Assert.Empty(blueprint.ClaudeMdSections);
+    }
+
+    [Fact]
+    public void EnsureDefaults_OnAnOlderManifest_AddsNewSectionsButKeepsEdits()
+    {
+        var store = new BlueprintStore(_root);
+        store.EnsureDefaults();
+        var manifestPath = Path.Combine(_root, ".firepit", "blueprints", "firepit", "blueprint.json");
+        // A v1 manifest as 0.12.x seeded it: inbox only, plus a user edit.
+        File.WriteAllText(manifestPath, """
+            {
+              "version": 1,
+              "description": "my edit",
+              "ensureProjectConfig": false,
+              "claudeMd": [ { "marker": "firepit_inbox_complete", "content": "my inbox wording\n" } ]
+            }
+            """);
+
+        Assert.True(store.EnsureDefaults());
+
+        var blueprint = store.TryLoad("firepit");
+        Assert.NotNull(blueprint);
+        // The user's own fields and their reworded section survive verbatim.
+        Assert.Equal("my edit", blueprint.Description);
+        Assert.False(blueprint.EnsureProjectConfig);
+        var inbox = Assert.Single(
+            blueprint.ClaudeMdSections, s => s.Marker == "firepit_inbox_complete");
+        Assert.Equal("my inbox wording\n", inbox.Content);
+        // Sections introduced after v1 are appended — this is the whole point:
+        // a new convention has to reach meta projects that already exist.
+        Assert.Contains(
+            blueprint.ClaudeMdSections,
+            s => s.Marker == FirepitBlueprintDefaults.ArtifactsSectionMarker);
+
+        // Migration runs exactly once.
+        Assert.False(store.EnsureDefaults());
     }
 
     [Theory]

@@ -13,7 +13,7 @@ public static class FirepitBlueprintDefaults
 
     public const string Description =
         "Standard Firepit project layout: shared-config git hygiene, " +
-        "inbox convention, knowledge base.";
+        "inbox convention, knowledge base, artifact pane.";
 
     /// <summary>Idempotency marker for the CLAUDE.md inbox section.</summary>
     public const string InboxSectionMarker = "firepit_inbox_complete";
@@ -24,6 +24,28 @@ public static class FirepitBlueprintDefaults
         "`.firepit/inbox/*.md` — cross-project notes Firepit routes here. " +
         "Act on each, then mark it done with the `firepit_inbox_complete` " +
         "MCP tool, passing the message's filename as the `id`.\n";
+
+    /// <summary>Idempotency marker for the CLAUDE.md artifact section.</summary>
+    public const string ArtifactsSectionMarker = "firepit_artifact_add";
+
+    // The artifact tools carry good descriptions, but a tool description is
+    // only read once the agent is already looking for that tool — nothing ever
+    // prompted the thought "I just produced a file the user wants to see". The
+    // inbox and knowledge conventions work precisely because they sit in
+    // CLAUDE.md and land in every session's context. Artifacts need the same.
+    public const string ArtifactsSection =
+        "## Firepit artifacts\n\n" +
+        "When you produce a file the user will want to open — a report, " +
+        "screenshot, diagram, generated image, log excerpt, build output, or " +
+        "an executable you built for them to run — pin it with the " +
+        "`firepit_artifact_add` MCP tool so it appears in the project's " +
+        "paperclip pane. Do this as you produce it, not at the end of the " +
+        "session; a path buried in scrollback is a path the user has to hunt " +
+        "for. Pinning only links the file — it stays where it is, and " +
+        "`firepit_artifact_remove` never deletes it. Check " +
+        "`firepit_artifact_list` first so you update an existing entry " +
+        "instead of piling up near-duplicates, and unpin what has gone " +
+        "stale.\n";
 
     /// <summary>Idempotency marker for the CLAUDE.md knowledge section.</summary>
     public const string KnowledgeSectionMarker = "firepit_knowledge_search";

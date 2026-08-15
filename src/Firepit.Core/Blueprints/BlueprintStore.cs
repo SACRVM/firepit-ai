@@ -18,6 +18,13 @@ public sealed class BlueprintStore
     public const string ManifestFileName = "blueprint.json";
     public const string FilesDirName = "files";
 
+    /// <summary>
+    /// Bump whenever a built-in CLAUDE.md section is added, so already-seeded
+    /// meta projects pick it up once via <see cref="EnsureDefaults"/>.
+    /// v2 (0.13.0) added the artifacts section.
+    /// </summary>
+    public const int CurrentManifestVersion = 2;
+
     private readonly string _blueprintsDir;
 
     public BlueprintStore(string projectsRoot)
@@ -46,26 +53,15 @@ public sealed class BlueprintStore
         var dir = Path.Combine(_blueprintsDir, FirepitBlueprintDefaults.DefaultBlueprintName);
         if (File.Exists(Path.Combine(dir, ManifestFileName)))
         {
-            return false;
+            return TopUpSeededSections(dir);
         }
 
         var manifest = new BlueprintManifest(
-            Version: 1,
+            Version: CurrentManifestVersion,
             Description: FirepitBlueprintDefaults.Description,
             EnsureProjectConfig: true,
             Gitignore: ProjectScaffolding.GitignoreEntries,
-            ClaudeMd:
-            [
-                new BlueprintManifestSection(
-                    FirepitBlueprintDefaults.InboxSectionMarker,
-                    FirepitBlueprintDefaults.InboxSection),
-                new BlueprintManifestSection(
-                    FirepitBlueprintDefaults.KnowledgeSectionMarker,
-                    FirepitBlueprintDefaults.KnowledgeSection),
-                new BlueprintManifestSection(
-                    FirepitBlueprintDefaults.PinnedSectionMarker,
-                    FirepitBlueprintDefaults.PinnedSection),
-            ]);
+            ClaudeMd: BuiltInClaudeMdSections);
 
         Directory.CreateDirectory(dir);
         File.WriteAllText(
@@ -79,6 +75,66 @@ public sealed class BlueprintStore
         SeedFile(dir, FirepitBlueprintDefaults.PinnedDigestPath, FirepitBlueprintDefaults.PinnedDigestSeed);
         return true;
     }
+
+    /// <summary>
+    /// One-time migration of an already-seeded manifest to
+    /// <see cref="CurrentManifestVersion"/>: appends built-in CLAUDE.md
+    /// sections introduced by a newer Firepit, matched by marker so nothing
+    /// the user wrote is touched. Without it a convention added in a later
+    /// release only ever reaches fresh installs — every existing meta project
+    /// stays frozen at the section set it was first seeded with.
+    ///
+    /// Gated on the manifest's version, not on "is a section missing": once
+    /// the file is at the current version it is the user's alone, deletions
+    /// included. Otherwise removing a section you don't want would just bring
+    /// it back on the next launch.
+    /// Returns true when the manifest was rewritten.
+    /// </summary>
+    private static bool TopUpSeededSections(string dir)
+    {
+        var manifestPath = Path.Combine(dir, ManifestFileName);
+        BlueprintManifest? existing;
+        try
+        {
+            existing = JsonSerializer.Deserialize(
+                File.ReadAllText(manifestPath), BlueprintJsonContext.Default.BlueprintManifest);
+        }
+        catch (Exception)
+        {
+            // Hand-edited into invalid JSON — that's the user's file to fix.
+            // Silently rewriting it would destroy the edit.
+            return false;
+        }
+        if (existing is null || existing.Version >= CurrentManifestVersion)
+        {
+            return false;
+        }
+
+        var sections = existing.ClaudeMd?.ToList() ?? [];
+        var known = sections.Select(s => s.Marker).ToHashSet(StringComparer.Ordinal);
+        foreach (var builtIn in BuiltInClaudeMdSections)
+        {
+            if (known.Add(builtIn.Marker))
+            {
+                sections.Add(builtIn);
+            }
+        }
+
+        File.WriteAllText(
+            manifestPath,
+            JsonSerializer.Serialize(
+                existing with { Version = CurrentManifestVersion, ClaudeMd = sections },
+                BlueprintJsonContext.Default.BlueprintManifest));
+        return true;
+    }
+
+    private static IReadOnlyList<BlueprintManifestSection> BuiltInClaudeMdSections =>
+    [
+        new(FirepitBlueprintDefaults.InboxSectionMarker,     FirepitBlueprintDefaults.InboxSection),
+        new(FirepitBlueprintDefaults.KnowledgeSectionMarker, FirepitBlueprintDefaults.KnowledgeSection),
+        new(FirepitBlueprintDefaults.PinnedSectionMarker,    FirepitBlueprintDefaults.PinnedSection),
+        new(FirepitBlueprintDefaults.ArtifactsSectionMarker, FirepitBlueprintDefaults.ArtifactsSection),
+    ];
 
     private static void SeedFile(string blueprintDir, string relativePath, string content)
     {
