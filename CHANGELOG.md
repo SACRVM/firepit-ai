@@ -5,6 +5,65 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-08-15
+
+### Added
+
+- **Agents now know the artifact pane exists.** The tools shipped with good
+  descriptions and near-zero adoption, because a tool description is only
+  read once the agent is already looking for that tool — nothing ever
+  prompted the thought "I just produced a file the user will want to
+  open". Artifacts get the same treatment as the inbox and knowledge
+  conventions: a CLAUDE.md section, seeded into new projects by the
+  scaffold and applied to existing ones via `firepit_blueprint_apply`.
+- **Blueprint manifests carry a version and migrate once.** Previously the
+  default blueprint was written on first use and then frozen, so a
+  convention added in a later release could only ever reach fresh
+  installs. Built-in sections introduced by a newer Firepit are now
+  appended by marker, leaving every user field and reworded section
+  untouched. Past the migration the file is yours again — a section you
+  delete stays deleted.
+
+### Changed
+
+- **Inbox triage is a list, not a wizard.** Every pending message on one
+  screen as sender, subject, age and a priority dot; the body moves below
+  the list, to look at rather than to read before acting. Five actions
+  become one primary plus two for the selected row. The primary action
+  hands the whole queue to the project's agent in a single prompt —
+  replacing the "work your inbox" that otherwise gets typed by hand — and
+  that prompt carries a standing rule: act, but stop and ask before
+  anything irreversible. The rule lives in the prompt rather than in
+  Firepit on purpose: judging whether an instruction is destructive means
+  reading the message, which a transparent host does not do.
+- **The shell-command trust dialog leads with the commands.** It used to
+  open with three lines of prose about cloned repos before showing what
+  would actually run, so the list got skipped along with the warning.
+  Commands first, admin rows marked, one line of context, and the button
+  says Allow.
+
+### Fixed
+
+- **The inbox body never wrapped.** Its scroll container allowed
+  horizontal scrolling, which measures the child at infinite width and
+  silently defeats `TextWrapping` — so long markdown ran off to the right
+  behind a scrollbar. The redundant outer scroller is gone; the text box
+  scrolls itself.
+- **Horizontal scrollbars rendered on the wrong axis.** The app-wide
+  scrollbar style only ever templated the vertical case: the track never
+  inherited the bar's orientation and the page commands were hardcoded, so
+  any horizontal bar came out laid sideways and scrolled the wrong way.
+  The inbox was simply the first place that produced one.
+- **Focusing the terminal could leave the keyboard nowhere.** Focus is two
+  stages — WPF focuses the WebView2 host, then a bridge message focuses
+  xterm's textarea — and stage two was skipped whenever the bridge wasn't
+  up yet, leaving the keyboard on a control that drops every keystroke.
+  It now waits for the ready handshake instead of relying on a user click.
+- **Focus diagnostics.** Intermittent focus theft leaves no trace, so the
+  two moments that identify it are now logged: window deactivation
+  together with the process that took the foreground, and keyboard focus
+  going to nothing.
+
 ## [0.12.0] — 2026-08-14
 
 ### Changed

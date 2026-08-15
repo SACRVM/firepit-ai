@@ -189,7 +189,8 @@
 
         <!-- Full text of the selected message. Here for when the user wants to
              look, not something they have to read to act: the agent reads the
-             file itself. -->
+             file itself. Horizontal scroll stays off — enabling it measures the
+             TextBox at infinite width, which silently defeats TextWrapping. -->
         <Border Grid.Row="2" Margin="20,10,20,12"
                 Padding="12,10"
                 Background="#0F0C09"
