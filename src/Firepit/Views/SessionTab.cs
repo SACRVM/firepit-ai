@@ -1064,23 +1064,24 @@ public sealed class SessionTab : IAsyncDisposable
                      && c.Disabled != true
                      && !string.IsNullOrEmpty(c.Command))
             .ToArray();
+        // The commands ARE the decision — lead with them. The old wording put
+        // three lines of prose about cloned repos ahead of the one thing worth
+        // reading, so the list got skipped along with the warning.
         var list = string.Join('\n', shellCmds.Select(c =>
         {
             var args = c.Args is { Count: > 0 } a ? " " + string.Join(' ', a) : string.Empty;
-            var elev = c.Elevated == true ? " (admin)" : string.Empty;
-            return $"  • {c.Name}: {c.Command}{args}{elev}";
+            var elev = c.Elevated == true ? "   ⚠ as admin" : string.Empty;
+            return $"  {c.Name}\n      {c.Command}{args}{elev}";
         }));
 
         var ok = MessageDialog.Show(
             owner,
-            title: $"Trust shell commands from {Context.Name}?",
+            title: $"Run these commands from {Context.Name}?",
             message:
-                "This project's .firepit/config.json declares shell commands that run with your user privileges. " +
-                "If you cloned this repo from elsewhere, malicious commands may be lurking in here.\n\n" +
-                "Commands declared in the current config:\n\n" +
-                (string.IsNullOrEmpty(list) ? "  (none)" : list) +
-                "\n\nTrust this exact config? Any byte-level edit re-prompts.",
-            primaryLabel: "Trust",
+                (string.IsNullOrEmpty(list) ? "  (none declared)" : list) +
+                "\n\nThey come from this project's .firepit/config.json and run as you." +
+                "\nAllowing covers this exact file — any edit asks again.",
+            primaryLabel: "Allow",
             secondaryLabel: "Cancel");
         if (ok)
         {

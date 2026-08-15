@@ -80,9 +80,8 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition x:Name="CaptionRow" Height="32" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="2*" MinHeight="96" />
+            <RowDefinition Height="3*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -107,76 +106,91 @@
                     ToolTip="Close" />
         </Grid>
 
-        <!-- Position + meta line -->
-        <Grid Grid.Row="1" Margin="20,16,20,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBlock x:Name="PriorityDot"
-                       Grid.Column="0"
-                       Text="●"
-                       FontSize="14"
-                       VerticalAlignment="Center"
-                       Margin="0,0,8,0"
-                       Foreground="#7A6F60" />
-            <TextBlock x:Name="MetaText"
-                       Grid.Column="1"
-                       Foreground="#7A6F60"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource SmallFontSize}"
-                       VerticalAlignment="Center"
-                       TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="PositionText"
-                       Grid.Column="2"
-                       Foreground="#7A6F60"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource SmallFontSize}"
-                       VerticalAlignment="Center" />
-        </Grid>
+        <!-- Every pending message at a glance. Sender, subject and age are the
+             whole triage surface — enough to decide, short enough to scan. -->
+        <ListBox Grid.Row="1"
+                 x:Name="MessageList"
+                 Margin="12,10,12,0"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 SelectionChanged="OnMessageSelected">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="8,7" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Cursor" Value="Hand" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <Border x:Name="Bd"
+                                        Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="3">
+                                    <ContentPresenter />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#1F1A14" TargetName="Bd" />
+                                    </Trigger>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="#2A211A" TargetName="Bd" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="●"
+                                   Foreground="{Binding DotBrush}"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,9,0" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding From}"
+                                   Foreground="#E8E2D8"
+                                   FontFamily="Cascadia Code, Consolas, Courier New"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   Width="160"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,12,0" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding Subject}"
+                                   Foreground="#A89F92"
+                                   FontFamily="Cascadia Code, Consolas, Courier New"
+                                   FontSize="{DynamicResource BaseFontSize}"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="3"
+                                   Text="{Binding Age}"
+                                   Foreground="#7A6F60"
+                                   FontFamily="Cascadia Code, Consolas, Courier New"
+                                   FontSize="{DynamicResource SmallFontSize}"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,0,0" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
 
-        <!-- Headers (from/subject) -->
-        <Grid Grid.Row="2" Margin="20,10,20,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="From:"
-                       Foreground="#7A6F60"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource BaseFontSize}"
-                       Margin="0,0,10,2" />
-            <TextBlock x:Name="FromText" Grid.Row="0" Grid.Column="1"
-                       Foreground="#E8E2D8"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource BaseFontSize}"
-                       TextTrimming="CharacterEllipsis"
-                       Margin="0,0,0,2" />
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Subject:"
-                       Foreground="#7A6F60"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource BaseFontSize}"
-                       Margin="0,0,10,0" />
-            <TextBlock x:Name="SubjectText" Grid.Row="1" Grid.Column="1"
-                       Foreground="#F5C97B"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="{DynamicResource BaseFontSize}"
-                       FontWeight="SemiBold"
-                       TextTrimming="CharacterEllipsis" />
-        </Grid>
-
-        <!-- Body -->
-        <!-- The TextBox scrolls itself. Wrapping it in a ScrollViewer (as this
-             did until v0.12.1) nests two scrollers, and with the outer one
-             allowing horizontal scroll the TextBox is measured at infinite
-             width — so TextWrapping never took effect and every long markdown
-             line ran off to the right. Horizontal scroll stays off. -->
-        <Border Grid.Row="3" Margin="20,4,20,12"
+        <!-- Full text of the selected message. Here for when the user wants to
+             look, not something they have to read to act: the agent reads the
+             file itself. -->
+        <Border Grid.Row="2" Margin="20,10,20,12"
                 Padding="12,10"
                 Background="#0F0C09"
                 BorderBrush="#332B22"
@@ -198,47 +212,32 @@
         </Border>
 
         <!-- Action row -->
-        <Grid Grid.Row="4" Margin="20,0,20,16">
+        <Grid Grid.Row="3" Margin="20,0,20,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                <Button x:Name="PrevButton"
-                        Style="{StaticResource InboxButton}"
-                        Margin="0,0,6,0"
-                        Click="OnPrevClick"
-                        ToolTip="Previous message">
-                    <TextBlock Text="‹ Prev" />
-                </Button>
-                <Button x:Name="NextButton"
-                        Style="{StaticResource InboxButton}"
-                        Click="OnNextClick"
-                        ToolTip="Next message">
-                    <TextBlock Text="Next ›" />
-                </Button>
-            </StackPanel>
+            <Button Grid.Column="0"
+                    x:Name="ProcessButton"
+                    Style="{StaticResource InboxPrimaryButton}"
+                    Click="OnProcessClick"
+                    ToolTip="Hand the inbox to this project's agent. It reads each message itself and stops to ask before anything irreversible.">
+                <TextBlock x:Name="ProcessLabel" Text="Process all" />
+            </Button>
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button x:Name="DeleteButton"
                         Style="{StaticResource InboxDangerButton}"
                         Margin="0,0,6,0"
                         Click="OnDeleteClick"
-                        ToolTip="Delete this message (file will be removed)">
+                        ToolTip="Delete the selected message (removes the file)">
                     <TextBlock Text="Delete" />
                 </Button>
                 <Button x:Name="MarkDoneButton"
                         Style="{StaticResource InboxButton}"
-                        Margin="0,0,6,0"
                         Click="OnMarkDoneClick"
-                        ToolTip="Move to .firepit/inbox/processed/ — you've seen it, no action needed">
-                    <TextBlock Text="Mark done" />
-                </Button>
-                <Button x:Name="SendToClaudeButton"
-                        Style="{StaticResource InboxPrimaryButton}"
-                        Click="OnSendToClaudeClick"
-                        ToolTip="Paste this message into the running session and ask Claude to act on it">
-                    <TextBlock Text="Send to Claude" />
+                        ToolTip="Move the selected message to inbox/processed/ without acting on it">
+                    <TextBlock Text="Done" />
                 </Button>
             </StackPanel>
         </Grid>

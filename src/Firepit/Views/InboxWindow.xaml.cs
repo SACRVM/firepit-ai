@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -11,12 +12,17 @@ using Serilog;
 namespace Firepit.Views;
 
 /// <summary>
-/// Wizard-style inbox browser. Shows one message at a time with Prev/Next,
-/// plus three actions: Send to Claude (sends a one-line file-reference prompt
-/// into the active PTY — the agent reads the message file itself),
-/// Mark done (moves the file to <c>.firepit/inbox/processed/</c>) and
-/// Delete (removes the file outright, with a confirm). All three auto-advance
-/// to the next message; the window closes when the queue runs dry.
+/// Inbox triage. Every pending message is listed at once — sender, subject,
+/// age — because that is what a decision needs; the body is there to look at,
+/// not to read before acting.
+///
+/// The primary action hands the whole queue to the project's agent in one
+/// prompt, replacing the "work your inbox" the user otherwise types by hand.
+/// The prompt carries the standing safety rule: act, but stop and ask before
+/// anything irreversible. That gate deliberately lives in the prompt and not
+/// in Firepit — deciding whether an instruction is destructive means reading
+/// the message, which the host does not do, and the receiving agent is the
+/// only party that can actually judge it.
 ///
 /// Filesystem is the source of truth. We load once on Show — if a new message
 /// arrives while the window is open, the user closes and reopens. Good enough
@@ -27,8 +33,7 @@ public partial class InboxWindow : Window
     private readonly string _projectName;
     private readonly string _inboxDir;
     private readonly System.Action<string> _sendToPty;
-    private readonly List<InboxItem> _messages = new();
-    private int _index;
+    private readonly ObservableCollection<InboxRow> _rows = new();
 
     private InboxWindow(string projectName, string projectPath, System.Action<string> sendToPty)
     {
@@ -36,6 +41,8 @@ public partial class InboxWindow : Window
         _projectName = projectName;
         _inboxDir    = Path.Combine(projectPath, ".firepit", "inbox");
         _sendToPty   = sendToPty;
+
+        MessageList.ItemsSource = _rows;
 
         if (TryFindResource("DialogCaptionPixelHeight") is double capH)
         {
@@ -45,9 +52,9 @@ public partial class InboxWindow : Window
 
             // capH is 32 * fontScale (see App.ApplyFontResources). The action
             // row's buttons grow with BaseFontSize, so at larger font settings
-            // the fixed 560x460 window clips them. Grow the window by the same
-            // scale to keep every button on-screen. Only scale up — at smaller
-            // fonts the default size is already roomy.
+            // the fixed window size clips them. Grow by the same scale to keep
+            // every button on-screen. Only scale up — at smaller fonts the
+            // default size is already roomy.
             var scale = capH / 32.0;
             if (scale > 1.0)
             {
@@ -63,7 +70,7 @@ public partial class InboxWindow : Window
     }
 
     /// <summary>
-    /// Open the inbox wizard for <paramref name="projectName"/>. Returns
+    /// Open inbox triage for <paramref name="projectName"/>. Returns
     /// immediately if the inbox is empty — caller can check via
     /// <see cref="HasMessages"/> on the supplied path before calling.
     /// </summary>
@@ -80,18 +87,18 @@ public partial class InboxWindow : Window
         // The font-scaled size in the ctor can still exceed a small screen.
         DialogSizing.ClampToScreen(win);
         win.LoadMessages();
-        if (win._messages.Count == 0)
+        if (win._rows.Count == 0)
         {
             // Race vs. the toolbar-button's count: the count's source-of-truth
             // is the file watcher, but a file could vanish between the click
-            // and Show. Don't pop an empty wizard.
+            // and Show. Don't pop an empty window.
             MessageDialog.Show(owner,
                 title: "Inbox empty",
                 message: $"No pending messages in {projectName}'s inbox.",
                 primaryLabel: "OK");
             return;
         }
-        win.RenderCurrent();
+        win.MessageList.SelectedIndex = 0;
         win.ShowDialog();
     }
 
@@ -110,8 +117,14 @@ public partial class InboxWindow : Window
 
     private void LoadMessages()
     {
-        _messages.Clear();
-        if (!Directory.Exists(_inboxDir)) return;
+        _rows.Clear();
+        if (!Directory.Exists(_inboxDir))
+        {
+            RefreshChrome();
+            return;
+        }
+
+        var items = new List<InboxItem>();
         try
         {
             foreach (var file in Directory.EnumerateFiles(_inboxDir, "*.md", SearchOption.TopDirectoryOnly))
@@ -120,7 +133,7 @@ public partial class InboxWindow : Window
                 {
                     var raw = File.ReadAllText(file);
                     var parsed = InboxFrontmatterParser.Parse(raw);
-                    _messages.Add(new InboxItem(
+                    items.Add(new InboxItem(
                         Id:       Path.GetFileName(file),
                         FullPath: file,
                         From:     parsed.Frontmatter.GetValueOrDefault("from"),
@@ -143,81 +156,60 @@ public partial class InboxWindow : Window
 
         // Filenames start with an ISO date in the firepit_send_to convention,
         // so ordinal sort puts oldest first — natural read order.
-        _messages.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
-        _index = 0;
+        items.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
+        foreach (var item in items)
+        {
+            _rows.Add(new InboxRow(item));
+        }
+        RefreshChrome();
     }
 
-    private void RenderCurrent()
+    private void RefreshChrome()
     {
-        if (_messages.Count == 0)
-        {
-            Close();
-            return;
-        }
-        _index = Math.Clamp(_index, 0, _messages.Count - 1);
-        var msg = _messages[_index];
+        CaptionText.Text = _rows.Count == 1
+            ? $"Inbox · {_projectName} · 1 message"
+            : $"Inbox · {_projectName} · {_rows.Count} messages";
 
-        CaptionText.Text  = $"Inbox · {_projectName}";
-        PositionText.Text = $"{_index + 1} / {_messages.Count}";
+        // One message is not a queue — say what the button will actually do.
+        ProcessLabel.Text = _rows.Count == 1 ? "Process" : "Process all";
 
-        FromText.Text    = string.IsNullOrWhiteSpace(msg.From)    ? "(unknown)" : msg.From;
-        SubjectText.Text = string.IsNullOrWhiteSpace(msg.Subject) ? "(no subject)" : msg.Subject;
-        BodyText.Text    = msg.Body ?? string.Empty;
-        // Every message starts at the top. Without this, paging on from a
-        // scrolled-down message drops you into the middle of the next one.
+        var hasSelection = MessageList.SelectedItem is InboxRow;
+        ProcessButton.IsEnabled  = _rows.Count > 0;
+        MarkDoneButton.IsEnabled = hasSelection;
+        DeleteButton.IsEnabled   = hasSelection;
+    }
+
+    private void OnMessageSelected(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        BodyText.Text = (MessageList.SelectedItem as InboxRow)?.Item.Body ?? string.Empty;
+        // Every message starts at the top. Without this, picking a row after
+        // scrolling drops you into the middle of the next one.
         BodyText.CaretIndex = 0;
         BodyText.ScrollToHome();
-
-        var metaParts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(msg.Priority)) metaParts.Add($"priority: {msg.Priority}");
-        if (!string.IsNullOrWhiteSpace(msg.SentAt))   metaParts.Add(FormatSentAt(msg.SentAt));
-        MetaText.Text = string.Join("  ·  ", metaParts);
-
-        PriorityDot.Foreground = msg.Priority?.ToLowerInvariant() switch
-        {
-            "high" => new SolidColorBrush(Color.FromRgb(0xE5, 0x8A, 0x78)),
-            "low"  => new SolidColorBrush(Color.FromRgb(0x5A, 0x52, 0x47)),
-            _      => new SolidColorBrush(Color.FromRgb(0xA8, 0x9F, 0x92)),
-        };
-
-        PrevButton.IsEnabled = _index > 0;
-        NextButton.IsEnabled = _index < _messages.Count - 1;
+        RefreshChrome();
     }
 
-    private static string FormatSentAt(string raw)
+    /// <summary>
+    /// Hand the queue to the agent. One prompt for the whole inbox rather than
+    /// one per message: the agent can read the folder itself, and a single
+    /// injection keeps the standing safety rule stated exactly once.
+    /// </summary>
+    private void OnProcessClick(object sender, RoutedEventArgs e)
     {
-        // Try ISO first ("2026-06-12T14:23:45.123Z"); fall back to verbatim.
-        if (DateTimeOffset.TryParse(raw, out var dto))
-        {
-            return dto.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
-        }
-        return raw;
-    }
+        if (_rows.Count == 0) return;
 
-    private void OnPrevClick(object sender, RoutedEventArgs e)
-    {
-        if (_index > 0) { _index--; RenderCurrent(); }
-    }
-
-    private void OnNextClick(object sender, RoutedEventArgs e)
-    {
-        if (_index < _messages.Count - 1) { _index++; RenderCurrent(); }
-    }
-
-    private void OnSendToClaudeClick(object sender, RoutedEventArgs e)
-    {
-        if (_messages.Count == 0) return;
-        var msg = _messages[_index];
-
-        // Send a file REFERENCE, not the body: long multi-line pastes through
-        // the PTY arrive truncated/mangled in the agent's prompt (observed in
-        // the field — only the tail survived). The message file is already on
-        // disk in the project the session runs in, so a one-line pointer is
-        // lossless and the agent reads the full frontmatter+body itself.
-        var prompt =
-            $"Inbox message from {msg.From ?? "(unknown)"} — \"{msg.Subject ?? "(no subject)"}\". " +
-            $"Read .firepit/inbox/{msg.Id} in full, act on it, then call " +
-            $"firepit_inbox_complete with id=\"{msg.Id}\".";
+        // A file REFERENCE, never the body: long multi-line pastes through the
+        // PTY arrive truncated in the agent's prompt (observed in the field —
+        // only the tail survived). The files are already on disk in the project
+        // the session runs in, so a pointer is lossless.
+        var prompt = _rows.Count == 1
+            ? $"Work the message .firepit/inbox/{_rows[0].Item.Id} in your Firepit inbox: "
+            : "Work your Firepit inbox: read every pending message in `.firepit/inbox/*.md` in full, ";
+        prompt +=
+            "act on it, then mark it done with the firepit_inbox_complete MCP tool "
+            + "(id = the message's filename). Stop and ask me first before anything "
+            + "irreversible — deleting or overwriting files, force-pushing, cutting a "
+            + "release, or sending anything outside this machine.";
 
         try { _sendToPty(prompt); }
         catch (Exception ex)
@@ -230,19 +222,17 @@ public partial class InboxWindow : Window
             return;
         }
 
-        Log.Information("Inbox wizard: sent '{Id}' to Claude in {Project}", msg.Id, _projectName);
-
-        // Optimistic advance: Claude will mark done via MCP when it finishes.
-        // The message stays in the list for now (user might want to re-read it),
-        // but we move the wizard forward — match Mark done / Delete behaviour
-        // for consistency.
-        AdvanceAfterAction(removeCurrent: false);
+        Log.Information(
+            "Inbox: handed {Count} message(s) to the agent in {Project}", _rows.Count, _projectName);
+        // The agent marks each one done via MCP as it finishes; the files stay
+        // put until then. Nothing left for the user to do here.
+        Close();
     }
 
     private void OnMarkDoneClick(object sender, RoutedEventArgs e)
     {
-        if (_messages.Count == 0) return;
-        var msg = _messages[_index];
+        if (MessageList.SelectedItem is not InboxRow row) return;
+        var msg = row.Item;
 
         var processedDir = Path.Combine(_inboxDir, "processed");
         var target       = Path.Combine(processedDir, msg.Id);
@@ -257,11 +247,11 @@ public partial class InboxWindow : Window
                 target    = Path.Combine(processedDir, $"{stem}-{stamp}{ext}");
             }
             File.Move(msg.FullPath, target);
-            Log.Information("Inbox wizard: marked '{Id}' done in {Project}", msg.Id, _projectName);
+            Log.Information("Inbox: marked '{Id}' done in {Project}", msg.Id, _projectName);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Inbox wizard: mark-done failed for {Id}", msg.Id);
+            Log.Warning(ex, "Inbox: mark-done failed for {Id}", msg.Id);
             MessageDialog.Show(this,
                 title: "Could not mark as done",
                 message: ex.Message,
@@ -269,13 +259,13 @@ public partial class InboxWindow : Window
             return;
         }
 
-        AdvanceAfterAction(removeCurrent: true);
+        RemoveRow(row);
     }
 
     private void OnDeleteClick(object sender, RoutedEventArgs e)
     {
-        if (_messages.Count == 0) return;
-        var msg = _messages[_index];
+        if (MessageList.SelectedItem is not InboxRow row) return;
+        var msg = row.Item;
 
         var confirmed = MessageDialog.Show(this,
             title: "Delete this message?",
@@ -287,11 +277,11 @@ public partial class InboxWindow : Window
         try
         {
             File.Delete(msg.FullPath);
-            Log.Information("Inbox wizard: deleted '{Id}' from {Project}", msg.Id, _projectName);
+            Log.Information("Inbox: deleted '{Id}' from {Project}", msg.Id, _projectName);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Inbox wizard: delete failed for {Id}", msg.Id);
+            Log.Warning(ex, "Inbox: delete failed for {Id}", msg.Id);
             MessageDialog.Show(this,
                 title: "Could not delete",
                 message: ex.Message,
@@ -299,51 +289,76 @@ public partial class InboxWindow : Window
             return;
         }
 
-        AdvanceAfterAction(removeCurrent: true);
+        RemoveRow(row);
     }
 
-    private void AdvanceAfterAction(bool removeCurrent)
+    private void RemoveRow(InboxRow row)
     {
-        if (removeCurrent)
-        {
-            _messages.RemoveAt(_index);
-            // Stay on the same index — that's now the "next" message. If we
-            // were at the end, step back so the user lands on the new last.
-            if (_index >= _messages.Count) _index = _messages.Count - 1;
-        }
-        else
-        {
-            if (_index < _messages.Count - 1) _index++;
-        }
-
-        if (_messages.Count == 0)
+        var index = _rows.IndexOf(row);
+        _rows.Remove(row);
+        if (_rows.Count == 0)
         {
             Close();
             return;
         }
-        RenderCurrent();
+        MessageList.SelectedIndex = Math.Clamp(index, 0, _rows.Count - 1);
+        RefreshChrome();
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        // Keyboard shortcuts for quick triage. Esc closes (cancel-button on
-        // none of the buttons keeps that working through WPF's defaults).
-        switch (e.Key)
+        if (e.Key == Key.Escape)
         {
-            case Key.Left:
-            case Key.PageUp:
-                if (PrevButton.IsEnabled) { OnPrevClick(this, new RoutedEventArgs()); e.Handled = true; }
-                break;
-            case Key.Right:
-            case Key.PageDown:
-                if (NextButton.IsEnabled) { OnNextClick(this, new RoutedEventArgs()); e.Handled = true; }
-                break;
-            case Key.Escape:
-                Close();
-                e.Handled = true;
-                break;
+            Close();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>List row: the triage surface, derived once at load time.</summary>
+    private sealed class InboxRow
+    {
+        public InboxRow(InboxItem item)
+        {
+            Item    = item;
+            From    = string.IsNullOrWhiteSpace(item.From) ? "(unknown)" : item.From;
+            Subject = string.IsNullOrWhiteSpace(item.Subject) ? "(no subject)" : item.Subject;
+            Age     = FormatAge(item.SentAt);
+
+            var dot = item.Priority?.ToLowerInvariant() switch
+            {
+                "high" => Color.FromRgb(0xE5, 0x8A, 0x78),
+                "low"  => Color.FromRgb(0x5A, 0x52, 0x47),
+                _      => Color.FromRgb(0xA8, 0x9F, 0x92),
+            };
+            var brush = new SolidColorBrush(dot);
+            brush.Freeze();
+            DotBrush = brush;
+        }
+
+        public InboxItem Item { get; }
+        public string From { get; }
+        public string Subject { get; }
+        public string Age { get; }
+        public Brush DotBrush { get; }
+
+        /// <summary>
+        /// Relative age beats a timestamp here: the only question a reader has
+        /// is "how stale is this", and "3h" answers it without arithmetic.
+        /// </summary>
+        private static string FormatAge(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw) || !DateTimeOffset.TryParse(raw, out var sent))
+            {
+                return string.Empty;
+            }
+            var span = DateTimeOffset.Now - sent;
+            if (span < TimeSpan.Zero)      return "now";
+            if (span < TimeSpan.FromMinutes(1)) return "now";
+            if (span < TimeSpan.FromHours(1))   return $"{(int)span.TotalMinutes}m";
+            if (span < TimeSpan.FromDays(1))    return $"{(int)span.TotalHours}h";
+            return $"{(int)span.TotalDays}d";
         }
     }
 
