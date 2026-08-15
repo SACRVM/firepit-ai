@@ -5,6 +5,37 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.13.1] — 2026-08-15
+
+### Added
+
+- **Discard a message from its own row.** The inbox list only offered
+  deletion through a bottom-bar button acting on the selected row, so the
+  hand went looking for an ✕ at the end of the row and found nothing.
+  There is one now, revealed on hover or selection, with the same
+  confirm. Rows also select in extended mode, so several can be cleared
+  before handing the rest over; the bottom Delete now appears only when a
+  selection spans more than one row.
+
+### Changed
+
+- **The inbox prompt reads the queue over MCP.** It used to point the
+  agent at `.firepit/inbox/*.md` on disk while telling it to finish with
+  `firepit_inbox_complete` — two mechanisms for one queue. The agent now
+  reads with `firepit_inbox_list` and completes on the same surface, and
+  the prompt no longer depends on the folder layout. Bodies still never
+  travel through the prompt itself.
+
+### Fixed
+
+- **Handing a prompt to the agent no longer needs a manual Enter.** The
+  carriage return rode along in the same PTY write as the text, and agent
+  TUIs treat a burst arriving in one read as a paste — so the return
+  counted as a newline inside the pasted text rather than as submit, and
+  the prompt sat in the input box waiting for a keypress, right after the
+  button that was supposed to send it. It now goes as its own keystroke
+  once the paste window has closed.
+
 ## [0.13.0] — 2026-08-15
 
 ### Added
