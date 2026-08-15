@@ -313,10 +313,14 @@ public sealed class SessionTab : IAsyncDisposable
     }
 
     /// <summary>
-    /// Shared "type this into the live PTY as if the user did" helper.
-    /// Used by the inbox wizard's Send-to-Claude action; appends \r so the
-    /// TUI's submit fires instead of leaving the buffer waiting on Enter
-    /// (a still-focused toolbar button would then re-trigger on key-up).
+    /// Long enough for an agent TUI to close its paste-coalescing window, short
+    /// enough that the user never sees the gap. See <see cref="PasteIntoSession"/>.
+    /// </summary>
+    private static readonly TimeSpan PromptSubmitDelay = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>
+    /// Shared "type this into the live PTY as if the user did" helper, used by
+    /// the inbox actions. Delivers the prompt and submits it.
     /// </summary>
     private void PasteIntoSession(string prompt)
     {
@@ -330,8 +334,39 @@ public sealed class SessionTab : IAsyncDisposable
                 secondaryLabel: null);
             return;
         }
-        var bytes = System.Text.Encoding.UTF8.GetBytes(prompt + "\r");
-        _ = _ptyChannel.WriteAsync(bytes, _cts?.Token ?? CancellationToken.None);
+        _ = SubmitPromptAsync(prompt, _cts?.Token ?? CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Write the prompt, then send the carriage return on its own.
+    ///
+    /// The return used to ride along in the same write. Agent TUIs coalesce a
+    /// burst that arrives in a single read into a *paste*, and a carriage
+    /// return inside that burst counts as a newline in the pasted text rather
+    /// than as submit — so the prompt just sat in the input box waiting for
+    /// Enter, immediately after the user clicked the button whose whole job was
+    /// to send it. Delivered separately, once the paste window has closed, it
+    /// registers as a keystroke again.
+    /// </summary>
+    private async Task SubmitPromptAsync(string prompt, CancellationToken ct)
+    {
+        try
+        {
+            var channel = _ptyChannel;
+            if (channel is null) return;
+            await channel.WriteAsync(System.Text.Encoding.UTF8.GetBytes(prompt), ct);
+            await Task.Delay(PromptSubmitDelay, ct);
+            if (_disposed) return;
+            // Re-read: the session can be rekindled or torn down inside the delay.
+            var live = _ptyChannel;
+            if (live is null) return;
+            await live.WriteAsync("\r"u8.ToArray(), ct);
+        }
+        catch (OperationCanceledException) { /* session stopped mid-delivery */ }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Prompt delivery failed for {Project}", Context.Name);
+        }
     }
 
     /// <summary>
