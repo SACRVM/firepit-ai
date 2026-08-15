@@ -5,6 +5,26 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-08-15
+
+### Fixed
+
+- **A project that declares an `id` can address itself again.** The
+  registry keys projects on the folder name, but a session exports
+  `FIREPIT_PROJECT_NAME` from the `id` in `.firepit/config.json` when one
+  is set. Those are allowed to differ, and when they do the agent knows
+  itself by a name the registry has never heard of — turning every tool
+  with a `projectName` parameter into a trap for that project, its own
+  default path included. The meta project is the live case: folder
+  `.firepit`, id `firepit-central`. Lookup now falls back to the
+  configured id, on a miss only.
+- **An empty list means an empty list.** `firepit_inbox_list`,
+  `firepit_list_commands` and `firepit_artifact_list` answered an unknown
+  project with no entries, which reads exactly like "nothing here" — so
+  an agent that correctly checked its inbox was told it was clear and
+  stopped looking, while messages sat waiting. A name that resolves to
+  nothing is now an error naming both ways to address a project.
+
 ## [0.14.0] — 2026-08-15
 
 ### Added
