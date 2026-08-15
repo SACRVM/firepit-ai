@@ -320,6 +320,9 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Names whatever takes the keyboard away mid-typing — an intermittent
+        // symptom that leaves nothing behind unless the moment itself is logged.
+        Firepit.Native.FocusDiagnostics.Attach(this);
         ReloadProjectList();
         if (_settings.Tabs.PersistAcrossRestarts)
         {

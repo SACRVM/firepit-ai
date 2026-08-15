@@ -244,8 +244,37 @@ public sealed class WebView2TerminalView : ITerminalView
     private void FocusCore()
     {
         try { _webView.Focus(); } catch { /* ignored */ }
+
+        // Stage two is the one that matters. Stage one hands WPF focus to the
+        // WebView2 host, so the keyboard now belongs to a control that drops
+        // every keystroke until xterm's hidden textarea is focused. Losing
+        // this message therefore doesn't just skip the focus — it makes the
+        // user type into a dead terminal, with no visible cause. If the bridge
+        // isn't up yet, wait for it rather than relying on the user to click.
+        if (_webView.CoreWebView2 is null || !_readyTcs.Task.IsCompleted)
+        {
+            _ = FocusWhenBridgeReadyAsync();
+            return;
+        }
+        try { _webView.CoreWebView2.PostWebMessageAsString("{\"type\":\"focus\"}"); }
+        catch (Exception ex) { Log.Debug(ex, "WV2 focus message failed"); }
+    }
+
+    private async Task FocusWhenBridgeReadyAsync()
+    {
+        try
+        {
+            await _readyTcs.Task.WaitAsync(TimeSpan.FromSeconds(15)).ConfigureAwait(true);
+        }
+        catch (Exception)
+        {
+            // Never became ready (init failed or the view was torn down).
+            // Nothing useful left to do — a user click still refocuses.
+            return;
+        }
+        if (_disposed) return;
         try { _webView.CoreWebView2?.PostWebMessageAsString("{\"type\":\"focus\"}"); }
-        catch { /* CoreWebView2 not ready yet — first user click will refocus */ }
+        catch (Exception ex) { Log.Debug(ex, "WV2 deferred focus message failed"); }
     }
 
     public void Dispose()
