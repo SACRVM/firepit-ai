@@ -340,6 +340,8 @@ public partial class MainWindow : Window
         // the first scope sync sees the full project list.
         InitializeKnowledgeService();
 
+        StartInboxAutoDelivery();
+
         // Start the MCP host now that this MainWindow (the IMcpBackend) exists.
         // App.OnStartup can't do this — StartupUri-based window construction
         // hadn't happened yet at that point in v0.5.13–v0.5.15, which is why
@@ -1757,6 +1759,7 @@ public partial class MainWindow : Window
             try { watcher.Dispose(); } catch { /* ignored */ }
         }
         _runsWatchers.Clear();
+        StopInboxAutoDelivery();
 
         if (_jobScheduler is not null)
         {

@@ -43,7 +43,15 @@ public sealed record PlatformSettings(
     bool InboxBadgesEnabled = true,
     bool RunBadgesEnabled = true,
     RunBadgePolicy RunBadgePolicy = RunBadgePolicy.All,
-    int RunRetentionDays = 30)
+    int RunRetentionDays = 30,
+    /// <summary>
+    /// Hand a newly arrived inbox message to the target project's agent on its
+    /// own, instead of waiting for the Inbox button. Only ever delivered to a
+    /// tab that is open and idle; otherwise the message stays in the inbox,
+    /// which remains the durable transport. Set false to go back to delivering
+    /// by hand.
+    /// </summary>
+    bool InboxAutoDeliverEnabled = true)
 {
     public static readonly PlatformSettings Defaults = new();
 }

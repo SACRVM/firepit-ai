@@ -338,6 +338,19 @@ public sealed class SessionTab : IAsyncDisposable
     }
 
     /// <summary>
+    /// Deliver a prompt to the live session with no UI of its own. Returns
+    /// false when there is no running session, so an automated caller can
+    /// leave the work queued instead of popping a dialog the user never asked
+    /// for. <see cref="PasteIntoSession"/> is the interactive counterpart.
+    /// </summary>
+    public bool TryDeliverPrompt(string prompt)
+    {
+        if (_disposed || _ptyChannel is null) return false;
+        _ = SubmitPromptAsync(prompt, _cts?.Token ?? CancellationToken.None);
+        return true;
+    }
+
+    /// <summary>
     /// Write the prompt, then send the carriage return on its own.
     ///
     /// The return used to ride along in the same write. Agent TUIs coalesce a

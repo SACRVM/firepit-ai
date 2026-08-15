@@ -5,6 +5,32 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-08-15
+
+### Added
+
+- **Inbox messages deliver themselves.** A message arriving for a project
+  with an open, idle tab is handed to that project's agent on its own —
+  no Inbox button, no typed "work your inbox". Which prompt it carries
+  depends on where the message lands: a background worker is told to act
+  and report back, while the tab the user is actually looking at is told
+  to summarise and wait for a go. That makes her active tab the single
+  human gate, and the circuit breaker with it — any chain routing back to
+  her stops there without a separate loop guard.
+
+  Delivery only ever targets a session sitting idle across consecutive
+  sweeps, so nothing arrives mid-turn. Idle is a trustworthy signal here
+  because the activity detector already pins Burning while the agent
+  reports progress over OSC 9;4 — thinking and tool calls produce no
+  output but do not read as finished. No agent output is parsed for any
+  of this; the host stays transparent, and the safety gate stays in the
+  prompt where the agent can actually judge it.
+
+  The inbox remains the durable transport: if no tab is open, the session
+  is busy, or it died, the message simply stays in the folder with its
+  badge. Turn the whole thing off with
+  `platform.inboxAutoDeliverEnabled: false` in `settings.json`.
+
 ## [0.13.1] — 2026-08-15
 
 ### Added
