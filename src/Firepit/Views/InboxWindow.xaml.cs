@@ -163,6 +163,10 @@ public partial class InboxWindow : Window
         FromText.Text    = string.IsNullOrWhiteSpace(msg.From)    ? "(unknown)" : msg.From;
         SubjectText.Text = string.IsNullOrWhiteSpace(msg.Subject) ? "(no subject)" : msg.Subject;
         BodyText.Text    = msg.Body ?? string.Empty;
+        // Every message starts at the top. Without this, paging on from a
+        // scrolled-down message drops you into the middle of the next one.
+        BodyText.CaretIndex = 0;
+        BodyText.ScrollToHome();
 
         var metaParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(msg.Priority)) metaParts.Add($"priority: {msg.Priority}");

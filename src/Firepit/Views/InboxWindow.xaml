@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Inbox"
-        Width="560"
-        Height="460"
-        MinWidth="420"
-        MinHeight="320"
+        Width="720"
+        Height="600"
+        MinWidth="460"
+        MinHeight="360"
         Background="#1A1612"
         Icon="/firepit.ico"
         BorderBrush="#332B22"
@@ -171,26 +171,30 @@
         </Grid>
 
         <!-- Body -->
+        <!-- The TextBox scrolls itself. Wrapping it in a ScrollViewer (as this
+             did until v0.12.1) nests two scrollers, and with the outer one
+             allowing horizontal scroll the TextBox is measured at infinite
+             width — so TextWrapping never took effect and every long markdown
+             line ran off to the right. Horizontal scroll stays off. -->
         <Border Grid.Row="3" Margin="20,4,20,12"
+                Padding="12,10"
                 Background="#0F0C09"
                 BorderBrush="#332B22"
                 BorderThickness="1"
                 CornerRadius="3">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Auto"
-                          Padding="12,10">
-                <TextBox x:Name="BodyText"
-                         IsReadOnly="True"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         Foreground="#D4CCBE"
-                         FontFamily="Cascadia Code, Consolas, Courier New"
-                         FontSize="{DynamicResource BaseFontSize}"
-                         TextWrapping="Wrap"
-                         AcceptsReturn="True"
-                         VerticalScrollBarVisibility="Disabled"
-                         HorizontalScrollBarVisibility="Disabled" />
-            </ScrollViewer>
+            <TextBox x:Name="BodyText"
+                     IsReadOnly="True"
+                     IsReadOnlyCaretVisible="False"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="0"
+                     Foreground="#D4CCBE"
+                     FontFamily="Cascadia Code, Consolas, Courier New"
+                     FontSize="{DynamicResource BaseFontSize}"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled" />
         </Border>
 
         <!-- Action row -->
