@@ -16,7 +16,7 @@
          A stale value here makes firepit-mcp.exe's file-version resource
          disagree with the version the MCP handshake reports, which sends
          diagnostics down the wrong path. -->
-    <Version>0.14.1</Version>
+    <Version>0.15.0</Version>
     <!-- Land alongside Firepit.exe so the installer can pick both up
          from the same publish dir. -->
     <PublishDir>$(MSBuildThisFileDirectory)..\..\bin\$(RuntimeIdentifier)\</PublishDir>
