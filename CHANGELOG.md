@@ -5,6 +5,31 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-08-17
+
+### Added
+
+- **Firepit tells agents about itself at the handshake.** The MCP protocol
+  carries an `instructions` field in the `initialize` result, and ours was
+  empty. It now holds Firepit's conventions — pin artifacts as you produce
+  them, close what you read in the inbox, search the knowledge base before
+  researching, how to address another project — so every session in every
+  project starts knowing them.
+
+  This replaces copying the same prose into each project's `CLAUDE.md` as
+  the primary channel, and fixes two things that were wrong with copying.
+  Copies go stale: the blueprint carries a manifest version and a one-time
+  top-up migration purely to chase them, while instructions ship inside the
+  executable and are current by construction. And copies are committed:
+  a public repo carried Firepit's conventions in its own `CLAUDE.md`, where
+  they are noise to everyone who does not run Firepit. The blueprint
+  sections stay as a fallback for agents that ignore the field.
+
+  Tool descriptions could not do this job. A description is only read once
+  the agent is already reaching for that tool, which never happens for a
+  habit nothing prompted — the reason the artifact pane went unused while
+  its tools were documented all along.
+
 ## [0.14.1] — 2026-08-15
 
 ### Fixed

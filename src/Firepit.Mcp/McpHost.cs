@@ -288,6 +288,9 @@ public sealed class McpHost : IDisposable
             ["name"]    = ServerName,
             ["version"] = _serverVersion,
         },
+        // Firepit's conventions, delivered at handshake instead of copied into
+        // every project's CLAUDE.md. See FirepitServerInstructions.
+        ["instructions"] = Firepit.Core.Mcp.FirepitServerInstructions.Text,
     };
 
     // --- tools/list -----------------------------------------------------
