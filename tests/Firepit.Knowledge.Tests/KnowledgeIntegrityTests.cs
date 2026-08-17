@@ -74,15 +74,34 @@ public sealed class KnowledgeIntegrityTests : IDisposable
         Assert.Empty(result.MissingFromIndex);
     }
 
+    /// <summary>
+    /// Puts the index out of step with the disk without touching a file.
+    /// </summary>
+    /// <remarks>
+    /// Writing to the documents directory would be the more literal simulation,
+    /// but the watcher is live in these tests and often repairs the drift before
+    /// the check runs — which passed here and failed on CI, where the timing
+    /// differs. The state under test is the disagreement itself, and this
+    /// produces it deterministically: no file event, nothing to race.
+    /// </remarks>
+    private void EditIndex(string sql)
+    {
+        using var conn = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source={KnowledgeStoreLocation.For(_project).IndexPath}");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
+    }
+
     [Fact]
     public async Task ADocumentTheIndexNeverSaw_IsReportedAsUnfindable()
     {
-        await SeedAndIndex("one.md");
+        await SeedAndIndex("one.md", "invisible.md");
 
-        // Appears without any event reaching the service — a lost watcher, a
-        // git checkout while the app was busy, a share that reconnected.
-        await File.WriteAllTextAsync(
-            Path.Combine(Docs, "invisible.md"), "# Invisible\n\nNever indexed.\n");
+        // On disk, absent from the manifest — a lost watcher, a git checkout
+        // while the app was busy, a share that reconnected.
+        EditIndex("DELETE FROM documents WHERE path = 'invisible.md'");
 
         var result = await CheckAsync();
 
@@ -96,8 +115,9 @@ public sealed class KnowledgeIntegrityTests : IDisposable
     {
         await SeedAndIndex("one.md");
 
-        await File.WriteAllTextAsync(
-            Path.Combine(Docs, "one.md"), "# One\n\nCompletely different content now.\n");
+        // The file is what it always was; the index believes something else,
+        // which is the state a half-finished pass leaves behind.
+        EditIndex("UPDATE documents SET content_hash = 'stale' WHERE path = 'one.md'");
 
         var result = await CheckAsync();
 

@@ -5,6 +5,19 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.25.2] — 2026-08-17
+
+Ships what 0.25.1 contained — its tag build failed on a flaky test, so no
+artifacts were published for it.
+
+### Fixed
+
+- Two integrity-check tests raced the file watcher. They wrote into the
+  documents directory to simulate drift the watcher had missed, but the watcher
+  is live in those tests and often reindexed first — passing locally and failing
+  on CI, where the timing differs. They now put the index out of step directly,
+  which is the state under test and produces no file event to race.
+
 ## [0.25.1] — 2026-08-17
 
 Three defects found by using the thing: pointing two repos at a third one's
