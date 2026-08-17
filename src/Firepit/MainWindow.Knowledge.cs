@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading.Tasks;
+using Firepit.Core.ProjectConfig;
 using Firepit.Knowledge;
 using Firepit.Mcp;
 using Serilog;
@@ -22,6 +23,18 @@ public partial class MainWindow
     // knowledge registers as the "global" scope. Remembered here so tool
     // calls originating *inside* the meta project resolve to "global" too.
     private string? _metaProjectName;
+
+    // Scopes that asked for a store we could not resolve, with the reason.
+    // Kept so the knowledge tools can answer "why is my scope gone" instead of
+    // the caller guessing from a bare not-found.
+    private IReadOnlyDictionary<string, string> _brokenKnowledgeScopes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    // Scope name → the project whose store holds its docs. Only redirected
+    // scopes appear here, and only so the tools stop telling an agent to
+    // commit a file that deliberately is not in this repo.
+    private IReadOnlyDictionary<string, string> _redirectedKnowledgeScopes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private void InitializeKnowledgeService()
     {
@@ -60,7 +73,13 @@ public partial class MainWindow
         try
         {
             var metaPath = Path.GetFullPath(Path.Combine(_settings.ProjectsRoot, ".firepit"));
+            var byName = _allProjects
+                .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Path, StringComparer.OrdinalIgnoreCase);
+
             var registrations = new List<KnowledgeScopeRegistration>();
+            var broken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var redirected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var project in _allProjects)
             {
@@ -72,18 +91,99 @@ public partial class MainWindow
                 }
 
                 var name = isMeta ? KnowledgeService.GlobalScopeName : project.Name;
-                if (seen.Add(name))
+                if (!seen.Add(name))
                 {
-                    registrations.Add(new KnowledgeScopeRegistration(name, project.Path));
+                    continue;
                 }
+
+                var (location, error) = ResolveKnowledgeStore(project, byName, redirected, name);
+                if (error is not null)
+                {
+                    // Deliberately not registered. A scope that silently fell
+                    // back to the project's own folder would put the research
+                    // this setting exists to hide into the repo it hides it
+                    // from — better the tools report the scope as missing.
+                    broken[name] = error;
+                    Log.Error(
+                        "Knowledge scope {Scope} disabled: {Reason}", name, error);
+                    continue;
+                }
+
+                registrations.Add(new KnowledgeScopeRegistration(name, project.Path, location));
             }
 
+            _brokenKnowledgeScopes = broken;
+            _redirectedKnowledgeScopes = redirected;
             svc.SyncScopes(registrations);
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Knowledge scope sync failed");
         }
+    }
+
+    /// <summary>
+    /// Where one project's knowledge docs belong, per its
+    /// <c>knowledge.storage</c> setting. Returns exactly one of a location or
+    /// an error — never a quiet default when the setting names a project we
+    /// cannot resolve.
+    /// </summary>
+    private (KnowledgeStoreLocation? Location, string? Error) ResolveKnowledgeStore(
+        Firepit.Core.Projects.Project project,
+        IReadOnlyDictionary<string, string> projectsByName,
+        IDictionary<string, string> redirected,
+        string scopeName)
+    {
+        string? storage = null;
+        try
+        {
+            storage = _projectConfigStore.Load(project.Path)?.Knowledge?.Storage;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not read knowledge config for {Project}", project.Name);
+        }
+
+        if (string.IsNullOrWhiteSpace(storage) ||
+            string.Equals(storage, ProjectKnowledgeConfig.SelfStorage, StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, null);
+        }
+
+        if (string.Equals(storage, project.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return (null, null);
+        }
+
+        if (!projectsByName.TryGetValue(storage, out var storePath))
+        {
+            return (null,
+                $"knowledge.storage names '{storage}', which is not a project Firepit knows. " +
+                "Use a project name from firepit_list_projects, or \"self\".");
+        }
+
+        var location = KnowledgeStoreLocation.InStore(storePath, project.Name, project.Path);
+        redirected[scopeName] = storage;
+
+        // The digest still lands in the project (CLAUDE.md imports it from
+        // there) but it is compiled from docs that are deliberately not in
+        // this repo — so keep it out of the repo too, locally and silently.
+        try
+        {
+            if (Firepit.Core.Projects.GitLocalExclude.Ensure(
+                    project.Path, Firepit.Core.Blueprints.FirepitBlueprintDefaults.PinnedDigestPath))
+            {
+                Log.Information(
+                    "Excluded the pinned digest from git for {Project} (knowledge stored in '{Store}')",
+                    project.Name, storage);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not update .git/info/exclude for {Project}", project.Name);
+        }
+
+        return (location, null);
     }
 
     private void DisposeKnowledgeService()
@@ -101,6 +201,26 @@ public partial class MainWindow
             ? KnowledgeService.GlobalScopeName
             : projectOrScopeName;
 
+    /// <summary>
+    /// What to tell the agent about persisting a knowledge file it just wrote.
+    /// A redirected scope's docs live in another project, so the usual "commit
+    /// it" would send the agent looking for a change this repo does not have.
+    /// </summary>
+    private string SaveHint(string scopeName, string wrote)
+    {
+        var scope = MapToScopeName(scopeName);
+        return _redirectedKnowledgeScopes.TryGetValue(scope, out var store)
+            ? $"{wrote} Stored in the '{store}' project, not this repo — commit it there."
+            : $"{wrote} Remember to commit the file.";
+    }
+
+    /// <summary>Why a scope is missing, when it is missing on purpose.</summary>
+    private string? BrokenScopeReason(string? scopeName) =>
+        scopeName is not null &&
+        _brokenKnowledgeScopes.TryGetValue(MapToScopeName(scopeName), out var reason)
+            ? $"Knowledge is disabled for '{scopeName}': {reason}"
+            : null;
+
     // --- IMcpBackend knowledge members -----------------------------------
 
     public async Task<Firepit.Mcp.KnowledgeSearchResult> SearchKnowledgeAsync(
@@ -111,6 +231,11 @@ public partial class MainWindow
         {
             return new Firepit.Mcp.KnowledgeSearchResult(
                 false, "Knowledge service is not running", [], false);
+        }
+
+        if (BrokenScopeReason(projectScopeName) is { } broken)
+        {
+            return new Firepit.Mcp.KnowledgeSearchResult(false, broken, [], false);
         }
 
         var scopes = new List<string>();
@@ -168,6 +293,11 @@ public partial class MainWindow
             return new KnowledgeDocumentResult(false, "Knowledge service is not running");
         }
 
+        if (BrokenScopeReason(scopeName) is { } broken)
+        {
+            return new KnowledgeDocumentResult(false, broken);
+        }
+
         try
         {
             var doc = await svc.GetDocumentAsync(MapToScopeName(scopeName), path);
@@ -195,12 +325,19 @@ public partial class MainWindow
             return new KnowledgeDocumentResult(false, "Knowledge service is not running");
         }
 
+        if (BrokenScopeReason(scopeName) is { } broken)
+        {
+            return new KnowledgeDocumentResult(false, broken);
+        }
+
         try
         {
             var doc = await svc.AddDocumentAsync(MapToScopeName(scopeName), title, content, pinned);
-            var message = pinned
-                ? "Saved, indexed and pinned (auto-injected at session start). Remember to commit the file."
-                : "Saved and indexed. Remember to commit the file.";
+            var message = SaveHint(
+                scopeName,
+                pinned
+                    ? "Saved, indexed and pinned (auto-injected at session start)."
+                    : "Saved and indexed.");
             return new KnowledgeDocumentResult(
                 true, message, doc.Scope, doc.Path, doc.Title, doc.Content);
         }
@@ -224,6 +361,11 @@ public partial class MainWindow
             return new KnowledgeDocumentResult(false, "Knowledge service is not running");
         }
 
+        if (BrokenScopeReason(scopeName) is { } broken)
+        {
+            return new KnowledgeDocumentResult(false, broken);
+        }
+
         try
         {
             var doc = await svc.UpdateDocumentAsync(MapToScopeName(scopeName), path, content, title, pinned);
@@ -232,7 +374,7 @@ public partial class MainWindow
                     false,
                     $"No document '{path}' in scope '{scopeName}' — use firepit_knowledge_add for new docs.")
                 : new KnowledgeDocumentResult(
-                    true, "Replaced and re-indexed. Remember to commit the change.",
+                    true, SaveHint(scopeName, "Replaced and re-indexed."),
                     doc.Scope, doc.Path, doc.Title, doc.Content);
         }
         catch (ArgumentException ex)
@@ -254,11 +396,16 @@ public partial class MainWindow
             return new ToolCallResult(false, "Knowledge service is not running");
         }
 
+        if (BrokenScopeReason(scopeName) is { } broken)
+        {
+            return new ToolCallResult(false, broken);
+        }
+
         try
         {
             var deleted = await svc.DeleteDocumentAsync(MapToScopeName(scopeName), path);
             return deleted
-                ? new ToolCallResult(true, "Deleted and removed from the index. Remember to commit the deletion.")
+                ? new ToolCallResult(true, SaveHint(scopeName, "Deleted and removed from the index."))
                 : new ToolCallResult(false, $"No document '{path}' in scope '{scopeName}'.");
         }
         catch (ArgumentException ex)

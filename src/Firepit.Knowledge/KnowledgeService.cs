@@ -9,7 +9,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Firepit.Knowledge;
 
 /// <summary>A scope the service should index and search: one project.</summary>
-public sealed record KnowledgeScopeRegistration(string Name, string ProjectPath);
+/// <param name="Store">
+/// Where the scope's files live. Null means the default — beside the project,
+/// under its own <c>.firepit/</c>. A caller passes this to route a project's
+/// docs into another project's store, which is how a public repo keeps
+/// research out of its own history.
+/// </param>
+public sealed record KnowledgeScopeRegistration(
+    string Name, string ProjectPath, KnowledgeStoreLocation? Store = null);
 
 // The one object the app wires up. Owns the embedding pipeline (one ONNX
 // session per app), one store/indexer/watcher per registered scope, and the
@@ -355,11 +362,13 @@ public sealed class KnowledgeService : IDisposable
     private Scope CreateScope(KnowledgeScopeRegistration reg)
     {
         var projectPath = Path.GetFullPath(reg.ProjectPath);
-        var store = new KnowledgeStore(GetKnowledgeDir(projectPath), GetIndexPath(projectPath));
+        var location = reg.Store ?? KnowledgeStoreLocation.BesideProject(projectPath);
+        var store = new KnowledgeStore(location.DocsDir, location.IndexPath);
         var scope = new Scope
         {
             Name = reg.Name,
             ProjectPath = projectPath,
+            DigestPath = location.DigestPath,
             Store = store,
             Indexer = new KnowledgeIndexer(
                 store, _embeddings, _loggerFactory.CreateLogger<KnowledgeIndexer>()),
@@ -368,15 +377,17 @@ public sealed class KnowledgeService : IDisposable
         return scope;
     }
 
-    // Watches the project's `.firepit/` for *.md changes and funnels
-    // knowledge-dir hits into a debounced rescan. Watching `.firepit` (not
-    // `knowledge/`) means the watcher survives the knowledge dir being
-    // created/deleted while the app runs; inbox/runs traffic is filtered
-    // out by path below.
+    // Watches the *parent* of the knowledge dir for *.md changes and funnels
+    // knowledge-dir hits into a debounced rescan. Watching the parent (not the
+    // knowledge dir itself) means the watcher survives the knowledge dir being
+    // created/deleted while the app runs; inbox/runs traffic is filtered out by
+    // path below. For the default layout the parent is the project's
+    // `.firepit/`; for a redirected store it is the store's `knowledge/`, where
+    // the same filter keeps sibling scopes from waking each other.
     private void TryAttachWatcher(Scope scope)
     {
-        var firepitDir = Path.Combine(scope.ProjectPath, ".firepit");
-        if (!Directory.Exists(firepitDir))
+        var firepitDir = Path.GetDirectoryName(scope.Store.KnowledgeDir);
+        if (firepitDir is null || !Directory.Exists(firepitDir))
         {
             return;
         }
@@ -470,11 +481,11 @@ public sealed class KnowledgeService : IDisposable
 
             // The always-on tier rides the same pass: any change to the
             // markdown (tool call, hand edit, delete) refreshes the digest.
-            // It lives NEXT TO the knowledge dir, so it never indexes itself,
-            // and the watcher's knowledge-dir filter ignores the write.
-            var digestPath = Path.Combine(
-                Path.GetDirectoryName(scope.Store.KnowledgeDir)!, PinnedDigest.FileName);
-            if (PinnedDigest.Regenerate(scope.Store.KnowledgeDir, digestPath))
+            // It never sits inside the knowledge dir, so it cannot index
+            // itself, and the watcher's knowledge-dir filter ignores the write.
+            // With a redirected store the digest stays in the project while
+            // the docs are elsewhere — hence a path of its own.
+            if (PinnedDigest.Regenerate(scope.Store.KnowledgeDir, scope.DigestPath))
             {
                 _logger.LogInformation(
                     "Knowledge scope {Scope}: pinned digest updated", scope.Name);
@@ -568,6 +579,12 @@ public sealed class KnowledgeService : IDisposable
     {
         public required string Name { get; init; }
         public required string ProjectPath { get; init; }
+
+        /// <summary>Where this scope's generated knowledge-pinned.md goes. Not
+        /// derivable from the docs dir — the docs may live in another project's
+        /// store, but the digest belongs to this project's CLAUDE.md.</summary>
+        public required string DigestPath { get; init; }
+
         public required KnowledgeStore Store { get; init; }
         public required KnowledgeIndexer Indexer { get; init; }
         public FileSystemWatcher? Watcher { get; set; }

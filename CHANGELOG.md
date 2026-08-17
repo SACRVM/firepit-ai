@@ -5,6 +5,43 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-08-17
+
+### Added
+
+- **A project can keep its knowledge in another project's repo.** Knowledge
+  docs were always committed next to the project, which leaves a public
+  repo one bad choice: publish the research, or don't keep it. The new
+  `knowledge.storage` setting in `.firepit/config.json` names the project
+  whose store holds the docs — they land in
+  `<that project>/knowledge/<this project>/` instead. Default is `"self"`,
+  so nothing changes for a project that says nothing.
+
+  The value is a project name, not an enum, which is why it also covers the
+  case it was not designed for: a dedicated private knowledge repo already
+  works as a target, with no second mechanism. `".firepit"` — the meta
+  project — is the expected answer for most projects.
+
+  A name that resolves to no project **disables the scope** and says why,
+  rather than falling back to `"self"`. The fallback is the dangerous
+  outcome here: it would write private research into the public repo the
+  setting exists to keep it out of.
+
+  What survives the redirect: `knowledge-pinned.md` stays in the project,
+  because CLAUDE.md imports it by a path relative to the project root. It is
+  excluded via `.git/info/exclude` rather than `.gitignore` — a gitignore
+  entry is itself committed and would advertise in a public repo that a
+  private file exists and what it is called.
+
+### Fixed
+
+- **The knowledge tools no longer tell you to commit a file that isn't in
+  your repo.** `firepit_knowledge_add` / `_update` / `_delete` ended every
+  reply with "Remember to commit the file". For a project whose docs live
+  in another project's store that sends the agent hunting for a change this
+  repo does not have; the reply now names the project that actually holds
+  the file.
+
 ## [0.15.0] — 2026-08-17
 
 ### Added

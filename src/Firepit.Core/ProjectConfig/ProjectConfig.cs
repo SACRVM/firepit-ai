@@ -23,7 +23,33 @@ public sealed record ProjectConfig(
     ProjectSessionConfig? Session = null,
     IReadOnlyList<ProjectCommand>? Commands = null,
     IReadOnlyList<ProjectScheduledJob>? ScheduledJobs = null,
-    ProjectRunsConfig? Runs = null);
+    ProjectRunsConfig? Runs = null,
+    ProjectKnowledgeConfig? Knowledge = null);
+
+/// <summary>
+/// Where this project's knowledge docs live.
+/// </summary>
+/// <param name="Storage">
+/// The name of the project whose store holds the docs. <c>"self"</c> (the
+/// default, and what null means) keeps them under this project's own
+/// <c>.firepit/knowledge/</c>, committed with the repo. Any other value names
+/// a registered project, and the docs land in
+/// <c>&lt;that project&gt;/knowledge/&lt;this project&gt;/</c> instead — the way a
+/// public repo keeps research out of its own history by parking it in a
+/// private one.
+///
+/// It is a project name rather than an enum on purpose: <c>".firepit"</c> (the
+/// meta project) is the expected answer, but any private project works, so an
+/// existing per-topic knowledge repo needs no second mechanism.
+///
+/// A name that resolves to nothing is an error, never a silent fall back to
+/// <c>"self"</c> — falling back would write private research into the public
+/// repo the setting exists to protect.
+/// </param>
+public sealed record ProjectKnowledgeConfig(string? Storage = null)
+{
+    public const string SelfStorage = "self";
+}
 
 /// <summary>
 /// User-defined toolbar buttons. Three variants:
