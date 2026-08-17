@@ -52,6 +52,7 @@ public sealed class KnowledgeIndexer
         var unchanged = 0;
         var removed = 0;
         var pending = 0;
+        var skipped = 0;
         var embeddingsAvailable = true;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -67,10 +68,14 @@ public sealed class KnowledgeIndexer
             {
                 bytes = await File.ReadAllBytesAsync(file, ct);
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Mid-write or locked (editor save in progress) — skip; the
-                // next watcher-debounced pass picks it up.
+                // Mid-write, locked by an editor, or gone since the listing.
+                // Counted, not just logged: the pass is now incomplete, and the
+                // caller has to know that so it schedules another one. Left as
+                // a debug log only, this document would stay unfindable for as
+                // long as nothing else happened to touch it.
+                skipped++;
                 _logger.LogDebug(ex, "Skipping unreadable knowledge file {Path}", rel);
                 continue;
             }
@@ -130,7 +135,7 @@ public sealed class KnowledgeIndexer
             removed++;
         }
 
-        return new IndexStats(indexed, unchanged, removed, pending);
+        return new IndexStats(indexed, unchanged, removed, pending, skipped);
     }
 
     private static string BuildEmbeddingText(string title, MarkdownChunk chunk)

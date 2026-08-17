@@ -351,10 +351,33 @@ public partial class MainWindow
                 .Select(h => new KnowledgeHitInfo(
                     h.Scope, h.Path, h.Title, h.Heading, h.Snippet, Math.Round(h.Score, 4)))
                 .ToArray();
-            var message = result.Degraded
-                ? "Vector search unavailable (embedding model not ready) — results are full-text only."
-                : null;
-            return new Firepit.Mcp.KnowledgeSearchResult(true, message, hits, result.Degraded);
+
+            // Warnings lead. Zero hits from a base that was not searched reads
+            // exactly like zero hits from a base that holds nothing, and the
+            // agent acts on the second reading — so the caveat has to arrive
+            // with the result, not sit in a log file.
+            var notes = new List<string>();
+            if (result.Warnings is { Count: > 0 })
+            {
+                notes.AddRange(result.Warnings);
+                if (hits.Length == 0)
+                {
+                    notes.Add(
+                        "No results — but for the reason(s) above, treat this as unknown rather than as nothing.");
+                }
+            }
+
+            if (result.Degraded)
+            {
+                notes.Add(
+                    "Vector search unavailable (embedding model not ready) — results are full-text only.");
+            }
+
+            return new Firepit.Mcp.KnowledgeSearchResult(
+                true,
+                notes.Count > 0 ? string.Join(" ", notes) : null,
+                hits,
+                result.Degraded);
         }
         catch (Exception ex)
         {

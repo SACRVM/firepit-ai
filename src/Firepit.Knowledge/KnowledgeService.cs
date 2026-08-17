@@ -18,6 +18,30 @@ namespace Firepit.Knowledge;
 public sealed record KnowledgeScopeRegistration(
     string Name, string ProjectPath, KnowledgeStoreLocation? Store = null);
 
+/// <summary>
+/// Whether a scope's index can be trusted to stand in for its documents.
+/// </summary>
+/// <remarks>
+/// The distinction exists because zero hits is an ambiguous answer. It means
+/// "nothing matched" only when the base was actually searched; the rest of the
+/// time it means the caller has been told nothing and cannot tell.
+/// </remarks>
+public enum ScopeHealth
+{
+    /// <summary>Registered, but no pass has finished yet — startup, or a
+    /// reindex still in flight.</summary>
+    NeverIndexed,
+
+    /// <summary>Last pass read every document.</summary>
+    Ready,
+
+    /// <summary>Last pass read some documents but not all; a retry is due.</summary>
+    Partial,
+
+    /// <summary>Last pass threw. The index is whatever it was before.</summary>
+    Failed,
+}
+
 // The one object the app wires up. Owns the embedding pipeline (one ONNX
 // session per app), one store/indexer/watcher per registered scope, and the
 // multi-scope search. Scope names are caller-defined; by convention the
@@ -43,6 +67,12 @@ public sealed class KnowledgeService : IDisposable
     /// differ from what was last indexed.
     /// </summary>
     private const int SafetySweepMs = 120_000;
+
+    /// <summary>
+    /// How long to wait before repeating a pass that could not read every
+    /// document. Tuned to an editor's save, which is the usual cause.
+    /// </summary>
+    private const int RetryMs = 3_000;
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
@@ -96,7 +126,10 @@ public sealed class KnowledgeService : IDisposable
         {
             try
             {
-                if (Fingerprint(scope.Store.KnowledgeDir) != scope.IndexedFingerprint)
+                // Anything but Ready means the last pass did not fully land, so
+                // the fingerprint says nothing and the pass is simply repeated.
+                if (scope.Health != ScopeHealth.Ready ||
+                    Fingerprint(scope.Store.KnowledgeDir) != scope.IndexedFingerprint)
                 {
                     _logger.LogInformation(
                         "Knowledge scope {Scope}: sweep found changes the watcher missed", scope.Name);
@@ -182,7 +215,18 @@ public sealed class KnowledgeService : IDisposable
 
                 foreach (var scope in scopes)
                 {
-                    await ReindexScopeAsync(scope, _shutdown.Token);
+                    try
+                    {
+                        await ReindexScopeAsync(scope, _shutdown.Token);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        // One scope failing its backfill must not cost the
+                        // others their vectors. The scope is marked Failed and
+                        // searches against it say so.
+                        _logger.LogWarning(
+                            ex, "Embedding backfill failed for scope {Scope}", scope.Name);
+                    }
                 }
             }
             catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
@@ -275,27 +319,75 @@ public sealed class KnowledgeService : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        var warnings = new List<string>();
         List<Scope> targets;
         lock (_scopesGate)
         {
-            targets = scopeNames is null || scopeNames.Count == 0
-                ? [.. _scopes.Values]
-                : [.. scopeNames
-                    .Select(n => _scopes.GetValueOrDefault(n))
-                    .OfType<Scope>()];
+            if (scopeNames is null || scopeNames.Count == 0)
+            {
+                targets = [.. _scopes.Values];
+            }
+            else
+            {
+                targets = [];
+                foreach (var name in scopeNames)
+                {
+                    if (_scopes.TryGetValue(name, out var scope))
+                    {
+                        targets.Add(scope);
+                        continue;
+                    }
+
+                    // Dropping the name silently is how a typo, a renamed
+                    // project or a scope disabled by a broken pointer turns
+                    // into "there is nothing on that subject".
+                    warnings.Add(
+                        $"No knowledge base named '{name}' — it was not searched. " +
+                        $"Known: {string.Join(", ", _scopes.Keys.Order())}");
+                }
+            }
+
+            foreach (var scope in targets)
+            {
+                switch (scope.Health)
+                {
+                    case ScopeHealth.NeverIndexed:
+                        warnings.Add(
+                            $"'{scope.Name}' has not finished indexing yet — results from it may be incomplete.");
+                        break;
+                    case ScopeHealth.Partial:
+                        warnings.Add(
+                            $"'{scope.Name}' is partly indexed: some documents could not be read on the last pass.");
+                        break;
+                    case ScopeHealth.Failed:
+                        warnings.Add(
+                            $"'{scope.Name}' failed to index ({scope.FailureReason}) — its results are stale or missing.");
+                        break;
+                }
+            }
         }
 
         var all = new List<KnowledgeHit>();
         var degraded = false;
         foreach (var scope in targets)
         {
-            var result = await _search.SearchAsync(scope.Store, scope.Name, query, limit, ct);
-            all.AddRange(result.Hits);
-            degraded |= result.Degraded;
+            try
+            {
+                var result = await _search.SearchAsync(scope.Store, scope.Name, query, limit, ct);
+                all.AddRange(result.Hits);
+                degraded |= result.Degraded;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One unreachable base must not take the healthy ones with it,
+                // and must not pass for an empty one either.
+                _logger.LogWarning(ex, "Knowledge search failed for scope {Scope}", scope.Name);
+                warnings.Add($"'{scope.Name}' could not be searched: {ex.Message}");
+            }
         }
 
         var hits = all.OrderByDescending(h => h.Score).Take(limit).ToList();
-        return new KnowledgeSearchResult(hits, degraded);
+        return new KnowledgeSearchResult(hits, degraded, warnings.Count > 0 ? warnings : null);
     }
 
     /// <summary>Reads one knowledge document. Null when it doesn't exist.</summary>
@@ -371,7 +463,7 @@ public sealed class KnowledgeService : IDisposable
 
         // Index right away; the watcher's debounced pass afterwards no-ops
         // via the content-hash manifest.
-        await ReindexScopeAsync(scope, ct);
+        await ReindexAfterWriteAsync(scope, ct);
 
         return new KnowledgeDocument(scope.Name, fileName, title, body);
     }
@@ -420,7 +512,7 @@ public sealed class KnowledgeService : IDisposable
         }
 
         await File.WriteAllTextAsync(full, body, ct);
-        await ReindexScopeAsync(scope, ct);
+        await ReindexAfterWriteAsync(scope, ct);
 
         var (resolvedTitle, _) = MarkdownChunker.Chunk(Path.GetFileName(full), body);
         var rel = Path.GetRelativePath(scope.Store.KnowledgeDir, full).Replace('\\', '/');
@@ -445,7 +537,7 @@ public sealed class KnowledgeService : IDisposable
         }
 
         File.Delete(full);
-        await ReindexScopeAsync(scope, ct);
+        await ReindexAfterWriteAsync(scope, ct);
         return true;
     }
 
@@ -599,15 +691,100 @@ public sealed class KnowledgeService : IDisposable
                     "Knowledge scope {Scope}: pinned digest updated", scope.Name);
             }
 
-            // Recorded after the pass, not before: a write that lands mid-pass
-            // then differs from the fingerprint and the sweep picks it up,
-            // rather than being recorded as already indexed.
-            scope.IndexedFingerprint = Fingerprint(scope.Store.KnowledgeDir);
+            if (stats.Complete)
+            {
+                scope.Health = ScopeHealth.Ready;
+                scope.FailureReason = null;
+
+                // Recorded after the pass, not before: a write that lands
+                // mid-pass then differs from the fingerprint and the sweep
+                // picks it up, rather than being recorded as already indexed.
+                scope.IndexedFingerprint = Fingerprint(scope.Store.KnowledgeDir);
+            }
+            else
+            {
+                // Deliberately no fingerprint. Recording one here would say
+                // "this directory is fully indexed" about a pass that skipped
+                // documents, and the sweep — which only acts on drift — would
+                // never come back for them.
+                scope.Health = ScopeHealth.Partial;
+                _logger.LogInformation(
+                    "Knowledge scope {Scope}: {Skipped} document(s) unreadable this pass — will retry",
+                    scope.Name, stats.Skipped);
+                ScheduleRetry(scope);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The index is whatever the last good pass left. Saying so beats
+            // answering searches from it as though it were current.
+            scope.Health = ScopeHealth.Failed;
+            scope.FailureReason = ex.Message;
+            throw;
         }
         finally
         {
             scope.IndexGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Indexes after a write that already landed on disk.
+    /// </summary>
+    /// <remarks>
+    /// Failure here must not read as "the document was not saved". The file is
+    /// the source of truth and it is written; reporting a failure would invite
+    /// the caller to write it again, and a second copy under a new slug is a
+    /// worse outcome than an index that catches up a moment later. The scope is
+    /// marked <see cref="ScopeHealth.Failed"/>, so searches say so, and the
+    /// sweep retries.
+    /// </remarks>
+    private async Task ReindexAfterWriteAsync(Scope scope, CancellationToken ct)
+    {
+        try
+        {
+            await ReindexScopeAsync(scope, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                ex, "Knowledge scope {Scope}: indexing failed after a write — the file is on disk",
+                scope.Name);
+        }
+    }
+
+    /// <summary>
+    /// Comes back for an incomplete pass sooner than the sweep would. Files are
+    /// usually locked for the length of an editor's save, not for minutes.
+    /// </summary>
+    private void ScheduleRetry(Scope scope)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(RetryMs, _shutdown.Token);
+                await ReindexScopeAsync(scope, _shutdown.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // The sweep is still behind this; it retries on drift, and an
+                // incomplete pass never recorded a fingerprint to drift from.
+                _logger.LogDebug(ex, "Knowledge retry failed for scope {Scope}", scope.Name);
+            }
+        });
     }
 
     private Scope RequireScope(string scopeName)
@@ -705,8 +882,16 @@ public sealed class KnowledgeService : IDisposable
 
         /// <summary>What the directory looked like at the end of the last index
         /// pass. The sweep compares against it to spot changes no watcher
-        /// reported.</summary>
+        /// reported. Only recorded after a pass that read every document —
+        /// otherwise the skipped ones would look indexed and never be
+        /// retried.</summary>
         public (int Count, long Newest) IndexedFingerprint { get; set; }
+
+        /// <summary>Whether this scope's index can be trusted to answer for it.</summary>
+        public ScopeHealth Health { get; set; } = ScopeHealth.NeverIndexed;
+
+        /// <summary>Why <see cref="Health"/> is <see cref="ScopeHealth.Failed"/>.</summary>
+        public string? FailureReason { get; set; }
         public SemaphoreSlim IndexGate { get; } = new(1, 1);
         public CancellationTokenSource? PendingReindex { get; set; }
 

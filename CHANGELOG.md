@@ -5,6 +5,50 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-08-17
+
+### Changed
+
+- **A knowledge search no longer returns a confident nothing.** Zero results
+  meant two very different things and looked identical: "nothing matched",
+  or "the base you asked about was never searched". The second reading is
+  the dangerous one, because an agent acts on the first and no one finds out.
+
+  Searches now carry warnings for every reason a result may be incomplete,
+  and `firepit_knowledge_search` puts them ahead of the results. When there
+  are no hits *and* a warning, the reply says outright that this is unknown
+  rather than nothing.
+
+  What is now reported instead of swallowed:
+
+  - **A scope name that does not resolve** — a typo, a renamed project, or a
+    base disabled by a broken pointer. It used to be dropped from the query,
+    so asking about a base that no longer exists answered "nothing found".
+    The warning names the bases that do exist.
+  - **A scope that has not finished indexing**, which is every scope during
+    the first seconds after launch.
+  - **A scope whose last pass failed**, whose index is therefore stale.
+  - **A scope that threw during the search itself.** One unreachable base
+    used to take the whole query with it; now the healthy ones still answer
+    and the broken one is named.
+
+### Fixed
+
+- **A document locked during an index pass stayed unfindable indefinitely.**
+  An unreadable file — an editor mid-save, typically — was skipped with a
+  debug log, and the pass then recorded the directory as fully indexed. The
+  safety sweep only acts on drift, so it never came back for it, and nothing
+  else would unless that file happened to be touched again. Skipped
+  documents are now counted, the pass is marked incomplete, no fingerprint
+  is recorded, and a retry follows in three seconds.
+- **A failed embedding backfill stopped at the first bad scope**, leaving
+  every scope after it without vectors.
+- **`firepit_knowledge_add` no longer reports failure for a document it
+  saved.** If indexing failed after the write, the file is on disk and the
+  reply said the call failed — inviting a second write and a duplicate under
+  a new slug. The write is what the reply is about; the index catches up on
+  the next pass, and the scope's state says it has not yet.
+
 ## [0.20.0] — 2026-08-17
 
 ### Fixed

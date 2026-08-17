@@ -48,7 +48,9 @@ public static class FirepitServerInstructions
         base). Save durable findings with firepit_knowledge_add, written in English —
         the index embeds English best. Correct or retire stale docs with
         firepit_knowledge_update and firepit_knowledge_delete rather than stacking new
-        ones on top.
+        ones on top. When a search comes back with no results but carries a message
+        about a base it could not search, that is not an answer — say so instead of
+        concluding the subject is unknown.
 
         Cross-project. firepit_list_projects shows the user's projects, and
         firepit_send_to delivers a message to another project's agent. Address a
