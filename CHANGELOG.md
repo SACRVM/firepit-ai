@@ -5,6 +5,40 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-08-17
+
+### Fixed
+
+- **Moving a project's knowledge took effect only after a restart.** Scope
+  identity was the project path alone, so a pointer file that moved the
+  storage — which is exactly what the settings dialog writes — looked like
+  no change at all and the old directory kept being indexed. The docs
+  directory is now part of the identity.
+- **A shared base was named `knowledge`.** The name came from the last path
+  segment, and the conventional layout ends in the fixed folder name, so
+  `projects/appkit/knowledge` produced a scope called `knowledge` rather
+  than `appkit`. It now takes the level above when the leaf is the
+  conventional name, and a directory named by hand is used as-is.
+- **A watcher that died stayed dead.** The error handler logged and left the
+  object in place, which still looked alive, so the retry on the next scope
+  sync never ran and that scope silently stopped updating until the app
+  restarted. The reference is now dropped, which makes it recoverable.
+
+### Added
+
+- **A safety sweep behind the watchers.** Every two minutes, each scope's
+  documents directory is fingerprinted — file count and newest write — and
+  reindexed if it no longer matches what was last indexed. Watchers that are
+  missing get re-attached in the same pass.
+
+  This is not how the index normally keeps up; the watcher still does that
+  in under a second. It is the backstop for the growing number of ways a
+  watcher can stop delivering without saying so: a network share that goes
+  away, a buffer overflow under a bulk change, a directory that did not
+  exist yet when its scope was created. Knowledge that is silently one
+  version behind is worse than knowledge that is missing, because nothing
+  about the answer says so.
+
 ## [0.19.1] — 2026-08-17
 
 ### Fixed

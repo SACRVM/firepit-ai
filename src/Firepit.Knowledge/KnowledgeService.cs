@@ -33,6 +33,17 @@ public sealed class KnowledgeService : IDisposable
     public const string GlobalScopeName = "global";
     private const int DebounceMs = 750;
 
+    /// <summary>
+    /// How often the safety sweep runs. It is not how the index normally keeps
+    /// up — the watcher does that, in under a second — it is the backstop for
+    /// every way a watcher can stop delivering without saying so: a share that
+    /// went away, a buffer overflow, a directory that did not exist when the
+    /// scope was created. Cheap enough to leave running: one directory
+    /// enumeration per scope, and a reindex only when the contents actually
+    /// differ from what was last indexed.
+    /// </summary>
+    private const int SafetySweepMs = 120_000;
+
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger _logger;
     private readonly ModelDownloader _downloader;
@@ -41,6 +52,7 @@ public sealed class KnowledgeService : IDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Lock _scopesGate = new();
     private readonly Dictionary<string, Scope> _scopes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Timer _sweep;
     private bool _disposed;
 
     public KnowledgeService(string modelDataRoot, ILoggerFactory? loggerFactory = null)
@@ -54,6 +66,76 @@ public sealed class KnowledgeService : IDisposable
             _downloader, _loggerFactory.CreateLogger<EmbeddingService>());
         _search = new KnowledgeSearch(
             _embeddings, _loggerFactory.CreateLogger<KnowledgeSearch>());
+        _sweep = new Timer(
+            _ => SafetySweep(), null, SafetySweepMs, SafetySweepMs);
+    }
+
+    /// <summary>
+    /// Catches what the watchers missed. Re-attaches watchers that are gone and
+    /// reindexes any scope whose directory no longer matches what was last
+    /// indexed. Exposed for tests; the timer is the normal caller.
+    /// </summary>
+    internal void SafetySweep()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        List<Scope> scopes;
+        lock (_scopesGate)
+        {
+            scopes = _scopes.Values.ToList();
+            foreach (var scope in scopes.Where(s => s.Watcher is null))
+            {
+                TryAttachWatcher(scope);
+            }
+        }
+
+        foreach (var scope in scopes)
+        {
+            try
+            {
+                if (Fingerprint(scope.Store.KnowledgeDir) != scope.IndexedFingerprint)
+                {
+                    _logger.LogInformation(
+                        "Knowledge scope {Scope}: sweep found changes the watcher missed", scope.Name);
+                    ScheduleReindex(scope);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // An unreachable share is not a reason to stop sweeping the rest.
+                _logger.LogDebug(ex, "Knowledge sweep skipped scope {Scope}", scope.Name);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cheap stand-in for the directory's content: how many documents, and the
+    /// newest write among them. Enough to notice an edit, an addition or a
+    /// deletion without reading a single file.
+    /// </summary>
+    private static (int Count, long Newest) Fingerprint(string docsDir)
+    {
+        if (!Directory.Exists(docsDir))
+        {
+            return (0, 0);
+        }
+
+        var count = 0;
+        long newest = 0;
+        foreach (var file in Directory.EnumerateFiles(docsDir, "*.md", SearchOption.AllDirectories))
+        {
+            count++;
+            var ticks = File.GetLastWriteTimeUtc(file).Ticks;
+            if (ticks > newest)
+            {
+                newest = ticks;
+            }
+        }
+
+        return (count, newest);
     }
 
     public static string GetKnowledgeDir(string projectPath) =>
@@ -144,10 +226,18 @@ public sealed class KnowledgeService : IDisposable
             {
                 if (_scopes.TryGetValue(name, out var existing))
                 {
-                    if (PathsEqual(existing.ProjectPath, reg.ProjectPath))
+                    // The docs directory is part of the identity, not just the
+                    // project path: a pointer file can move a scope's storage
+                    // while the project stays exactly where it is, and treating
+                    // that as unchanged would keep indexing the old location
+                    // until the next restart.
+                    var wantedDocs = (reg.Store ?? KnowledgeStoreLocation.For(reg.ProjectPath)).DocsDir;
+                    if (PathsEqual(existing.ProjectPath, reg.ProjectPath) &&
+                        PathsEqual(existing.Store.KnowledgeDir, wantedDocs))
                     {
-                        // `.firepit` may have appeared since the last sync —
-                        // watcher attach is retried here rather than polled.
+                        // The parent directory may have appeared since the last
+                        // sync — watcher attach is retried here rather than
+                        // polled.
                         if (existing.Watcher is null)
                         {
                             TryAttachWatcher(existing);
@@ -407,8 +497,26 @@ public sealed class KnowledgeService : IDisposable
                 OnKnowledgeFileEvent(scope, e.OldFullPath);
                 OnKnowledgeFileEvent(scope, e.FullPath);
             };
-            watcher.Error += (_, e) => _logger.LogWarning(
-                e.GetException(), "Knowledge watcher error for scope {Scope}", scope.Name);
+            // A watcher that errors is usually done for — buffer overflow, or
+            // a network share going away. Dropping the reference is what makes
+            // it recoverable: the sweep re-attaches a null watcher, whereas a
+            // dead object that still looks alive means the scope silently
+            // stops updating until the app restarts.
+            watcher.Error += (_, e) =>
+            {
+                _logger.LogWarning(
+                    e.GetException(), "Knowledge watcher lost for scope {Scope} — will re-attach", scope.Name);
+                lock (_scopesGate)
+                {
+                    if (ReferenceEquals(scope.Watcher, watcher))
+                    {
+                        scope.Watcher = null;
+                    }
+                }
+
+                try { watcher.Dispose(); } catch { /* already gone */ }
+                ScheduleReindex(scope);
+            };
             watcher.EnableRaisingEvents = true;
             scope.Watcher = watcher;
         }
@@ -490,6 +598,11 @@ public sealed class KnowledgeService : IDisposable
                 _logger.LogInformation(
                     "Knowledge scope {Scope}: pinned digest updated", scope.Name);
             }
+
+            // Recorded after the pass, not before: a write that lands mid-pass
+            // then differs from the fingerprint and the sweep picks it up,
+            // rather than being recorded as already indexed.
+            scope.IndexedFingerprint = Fingerprint(scope.Store.KnowledgeDir);
         }
         finally
         {
@@ -560,6 +673,7 @@ public sealed class KnowledgeService : IDisposable
         }
 
         _disposed = true;
+        _sweep.Dispose();
         _shutdown.Cancel();
         lock (_scopesGate)
         {
@@ -588,6 +702,11 @@ public sealed class KnowledgeService : IDisposable
         public required KnowledgeStore Store { get; init; }
         public required KnowledgeIndexer Indexer { get; init; }
         public FileSystemWatcher? Watcher { get; set; }
+
+        /// <summary>What the directory looked like at the end of the last index
+        /// pass. The sweep compares against it to spot changes no watcher
+        /// reported.</summary>
+        public (int Count, long Newest) IndexedFingerprint { get; set; }
         public SemaphoreSlim IndexGate { get; } = new(1, 1);
         public CancellationTokenSource? PendingReindex { get; set; }
 

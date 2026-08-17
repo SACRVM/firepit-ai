@@ -169,14 +169,11 @@ public partial class MainWindow
                 // whichever member happened to be discovered first. Falls back
                 // to the project name if that would collide.
                 var scopeName = projectScope;
-                if (resolution.IsRedirected)
+                if (resolution.IsRedirected &&
+                    BaseNameFor(resolution.DocsDir) is { } folder &&
+                    !taken.Contains(folder))
                 {
-                    var folder = Path.GetFileName(
-                        resolution.DocsDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-                    if (!string.IsNullOrEmpty(folder) && !taken.Contains(folder))
-                    {
-                        scopeName = folder;
-                    }
+                    scopeName = folder;
                 }
 
                 taken.Add(scopeName);
@@ -197,6 +194,27 @@ public partial class MainWindow
         {
             Log.Warning(ex, "Knowledge scope sync failed");
         }
+    }
+
+    /// <summary>
+    /// What to call a shared base, given the directory holding its docs.
+    /// </summary>
+    /// <remarks>
+    /// The conventional layout ends in the fixed folder name — <c>appkit/knowledge</c>
+    /// — so the leaf says nothing and the level above carries the meaning. A
+    /// directory the user named themselves is taken as-is.
+    /// </remarks>
+    private static string? BaseNameFor(string docsDir)
+    {
+        var trimmed = docsDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var leaf = Path.GetFileName(trimmed);
+        if (!string.Equals(leaf, KnowledgeLayout.DirName, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.IsNullOrEmpty(leaf) ? null : leaf;
+        }
+
+        var parent = Path.GetFileName(Path.GetDirectoryName(trimmed) ?? string.Empty);
+        return string.IsNullOrEmpty(parent) ? null : parent;
     }
 
     // The digest stays in the project (CLAUDE.md imports it from there) but is
