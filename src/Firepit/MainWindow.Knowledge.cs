@@ -145,7 +145,7 @@ public partial class MainWindow
         }
 
         if (string.IsNullOrWhiteSpace(storage) ||
-            string.Equals(storage, ProjectKnowledgeConfig.SelfStorage, StringComparison.OrdinalIgnoreCase))
+            string.Equals(storage, ProjectKnowledgeConfig.RepoStorage, StringComparison.OrdinalIgnoreCase))
         {
             return (null, null);
         }
@@ -159,7 +159,7 @@ public partial class MainWindow
         {
             return (null,
                 $"knowledge.storage names '{storage}', which is not a project Firepit knows. " +
-                "Use a project name from firepit_list_projects, or \"self\".");
+                "Use a project name from firepit_list_projects, or \"repo\".");
         }
 
         var location = KnowledgeStoreLocation.InStore(storePath, project.Name, project.Path);

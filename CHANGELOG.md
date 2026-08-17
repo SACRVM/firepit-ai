@@ -5,6 +5,19 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-08-17
+
+### Changed
+
+- **`knowledge.storage` defaults to `"repo"`, not `"self"`.** The name that
+  was agreed. `"self"` shipped in 0.16.0 for about twenty minutes and is
+  gone rather than aliased — two words for one setting is the confusion the
+  value space was reorganised to avoid.
+
+  Naming the project itself does the same thing as `"repo"`, which is the
+  way out should a project ever genuinely be called "repo". That leaves
+  exactly one reserved word in the value space.
+
 ## [0.16.0] — 2026-08-17
 
 ### Added

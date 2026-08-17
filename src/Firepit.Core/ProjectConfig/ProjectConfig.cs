@@ -30,7 +30,7 @@ public sealed record ProjectConfig(
 /// Where this project's knowledge docs live.
 /// </summary>
 /// <param name="Storage">
-/// The name of the project whose store holds the docs. <c>"self"</c> (the
+/// The name of the project whose store holds the docs. <c>"repo"</c> (the
 /// default, and what null means) keeps them under this project's own
 /// <c>.firepit/knowledge/</c>, committed with the repo. Any other value names
 /// a registered project, and the docs land in
@@ -42,13 +42,17 @@ public sealed record ProjectConfig(
 /// meta project) is the expected answer, but any private project works, so an
 /// existing per-topic knowledge repo needs no second mechanism.
 ///
+/// Naming this project itself means the same as <c>"repo"</c>, which is the
+/// escape hatch if a project ever really is called "repo" — the one reserved
+/// word left in the value space.
+///
 /// A name that resolves to nothing is an error, never a silent fall back to
-/// <c>"self"</c> — falling back would write private research into the public
+/// <c>"repo"</c> — falling back would write private research into the public
 /// repo the setting exists to protect.
 /// </param>
 public sealed record ProjectKnowledgeConfig(string? Storage = null)
 {
-    public const string SelfStorage = "self";
+    public const string RepoStorage = "repo";
 }
 
 /// <summary>
