@@ -15,9 +15,21 @@ public enum RepoVisibility
     Private,
 }
 
+/// <param name="Value">The visibility to act on — never "unknown".</param>
+/// <param name="Certain">
+/// False when <paramref name="Value"/> is the fail-safe guess rather than an
+/// answer. Choosing a fragment may use the guess; auditing one may not.
+/// </param>
+public sealed record VisibilityResult(RepoVisibility Value, bool Certain);
+
 public static class GitHubVisibility
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
+
+    // gh missing is a property of the machine, not of the repository. Without
+    // this latch an offline integrity check pays the full timeout once per
+    // project — minutes of blocking for an answer that was never coming.
+    private static bool _ghUnavailable;
 
     /// <summary>
     /// Which policy fragment applies. <see cref="RepoVisibility.None"/> means
@@ -38,24 +50,38 @@ public static class GitHubVisibility
     /// fragment.
     /// </para>
     /// </remarks>
-    public static RepoVisibility Detect(string projectPath)
+    public static RepoVisibility Detect(string projectPath) => Inspect(projectPath).Value;
+
+    /// <summary>
+    /// <see cref="Detect"/>, plus whether the answer was read or guessed.
+    /// </summary>
+    /// <remarks>
+    /// The fail-safe default is right for <i>choosing</i> a fragment and wrong
+    /// for <i>auditing</i> one: an offline machine, or one without <c>gh</c>,
+    /// would otherwise have every private repo reported as "PUBLIC but importing
+    /// the private policy" — turning "we could not tell" into a confident wrong
+    /// error, which is the exact inversion this subsystem exists to prevent.
+    /// </remarks>
+    public static VisibilityResult Inspect(string projectPath)
     {
         var gitDir = Path.Combine(projectPath, ".git");
-        if (!Directory.Exists(gitDir))
+        if (!Directory.Exists(gitDir) || !HasGitHubRemote(gitDir))
         {
-            return RepoVisibility.None;
-        }
-
-        if (!HasGitHubRemote(gitDir))
-        {
-            return RepoVisibility.None;
+            // Not a guess: no .git, or no GitHub remote, is an answer.
+            return new VisibilityResult(RepoVisibility.None, Certain: true);
         }
 
         var visibility = Query(projectPath);
-        return string.Equals(visibility, "PRIVATE", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(visibility, "INTERNAL", StringComparison.OrdinalIgnoreCase)
-            ? RepoVisibility.Private
-            : RepoVisibility.Public;
+        if (visibility is null)
+        {
+            return new VisibilityResult(RepoVisibility.Public, Certain: false);
+        }
+
+        var isPrivate =
+            string.Equals(visibility, "PRIVATE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(visibility, "INTERNAL", StringComparison.OrdinalIgnoreCase);
+        return new VisibilityResult(
+            isPrivate ? RepoVisibility.Private : RepoVisibility.Public, Certain: true);
     }
 
     // Read rather than shelled out to: one file open beats a subprocess, and
@@ -76,6 +102,11 @@ public static class GitHubVisibility
 
     private static string? Query(string projectPath)
     {
+        if (_ghUnavailable)
+        {
+            return null;
+        }
+
         try
         {
             // Fully qualified: the Firepit.Core.Process namespace shadows the
@@ -102,11 +133,26 @@ public static class GitHubVisibility
                 return null;
             }
 
-            return process.ExitCode == 0 ? stdout.Trim() : null;
+            if (process.ExitCode != 0)
+            {
+                return null;
+            }
+
+            var value = stdout.Trim();
+            return value.Length == 0 ? null : value;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // gh is not on PATH. True for every project on this machine, so
+            // stop asking — the alternative is one process launch and one
+            // timeout per project.
+            _ghUnavailable = true;
+            return null;
         }
         catch (Exception)
         {
-            // gh missing or not authenticated — same answer as a failed call.
+            // Not authenticated, no network, repo gone: per-repository, so no
+            // latch — another project may still answer.
             return null;
         }
     }

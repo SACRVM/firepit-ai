@@ -30,11 +30,31 @@ public sealed record ScopeIntegrity(
     IReadOnlyList<string>? Repairs = null)
 {
     /// <summary>
+    /// False when the caller asked about a scope that is not registered.
+    /// </summary>
+    /// <remarks>
+    /// An unknown name used to be dropped from the result list, which made an
+    /// unregistered scope indistinguishable from a healthy one: no rows, no
+    /// findings, "sound". That is the same silent-loss shape the check exists
+    /// to end — a project whose knowledge never registered would have been told
+    /// its knowledge is fine.
+    /// </remarks>
+    public bool IsRegistered { get; init; } = true;
+
+    /// <summary>A scope the caller named that nothing is registered under.</summary>
+    public static ScopeIntegrity Unregistered(string scope) =>
+        new(scope, string.Empty, ScopeHealth.Failed, 0, 0, [], [], [])
+        {
+            IsRegistered = false,
+        };
+
+    /// <summary>
     /// Whether the index can stand in for the documents. Deliberately strict:
     /// a scope that is merely <i>probably</i> current is the state this whole
     /// check exists to stop treating as fine.
     /// </summary>
     public bool Sound =>
+        IsRegistered &&
         IndexError is null &&
         Health is ScopeHealth.Ready &&
         MissingFromIndex.Count == 0 &&
@@ -44,6 +64,15 @@ public sealed record ScopeIntegrity(
     public IReadOnlyList<string> Describe()
     {
         var findings = new List<string>();
+        if (!IsRegistered)
+        {
+            return
+            [
+                $"no knowledge scope named '{Scope}' is registered, so searches against it " +
+                "return nothing — not because nothing is known, but because nothing is asked",
+            ];
+        }
+
         if (IndexError is { } err)
         {
             findings.Add($"index unreadable: {err}");

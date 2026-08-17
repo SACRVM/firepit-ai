@@ -112,35 +112,45 @@ public sealed class KnowledgeService : IDisposable
             return;
         }
 
-        List<Scope> scopes;
-        lock (_scopesGate)
+        // The sweep runs on a timer callback, which means an escaping exception
+        // does not fail a request — it takes the process down. Everything below
+        // is best-effort maintenance; none of it is worth that.
+        try
         {
-            scopes = _scopes.Values.ToList();
-            foreach (var scope in scopes.Where(s => s.Watcher is null))
+            List<Scope> scopes;
+            lock (_scopesGate)
             {
-                TryAttachWatcher(scope);
-            }
-        }
-
-        foreach (var scope in scopes)
-        {
-            try
-            {
-                // Anything but Ready means the last pass did not fully land, so
-                // the fingerprint says nothing and the pass is simply repeated.
-                if (scope.Health != ScopeHealth.Ready ||
-                    Fingerprint(scope.Store.KnowledgeDir) != scope.IndexedFingerprint)
+                scopes = _scopes.Values.ToList();
+                foreach (var scope in scopes.Where(s => s.Watcher is null))
                 {
-                    _logger.LogInformation(
-                        "Knowledge scope {Scope}: sweep found changes the watcher missed", scope.Name);
-                    ScheduleReindex(scope);
+                    TryAttachWatcher(scope);
                 }
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+
+            foreach (var scope in scopes)
             {
-                // An unreachable share is not a reason to stop sweeping the rest.
-                _logger.LogDebug(ex, "Knowledge sweep skipped scope {Scope}", scope.Name);
+                try
+                {
+                    // Anything but Ready means the last pass did not fully land,
+                    // so the fingerprint says nothing and the pass is repeated.
+                    if (scope.Health != ScopeHealth.Ready ||
+                        Fingerprint(scope.Store.KnowledgeDir) != scope.IndexedFingerprint)
+                    {
+                        _logger.LogInformation(
+                            "Knowledge scope {Scope}: sweep found changes the watcher missed", scope.Name);
+                        ScheduleReindex(scope);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // An unreachable share is not a reason to stop sweeping the rest.
+                    _logger.LogDebug(ex, "Knowledge sweep skipped scope {Scope}", scope.Name);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Knowledge safety sweep failed");
         }
     }
 
@@ -412,14 +422,38 @@ public sealed class KnowledgeService : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         List<Scope> targets;
+        List<string> unregistered = [];
         lock (_scopesGate)
         {
-            targets = scopeNames is null || scopeNames.Count == 0
-                ? [.. _scopes.Values]
-                : [.. scopeNames.Select(n => _scopes.GetValueOrDefault(n)).OfType<Scope>()];
+            if (scopeNames is null || scopeNames.Count == 0)
+            {
+                targets = [.. _scopes.Values];
+            }
+            else
+            {
+                targets = [];
+                foreach (var name in scopeNames)
+                {
+                    if (_scopes.TryGetValue(name, out var scope))
+                    {
+                        targets.Add(scope);
+                    }
+                    else
+                    {
+                        // Reported, not skipped. Dropping it returned an empty
+                        // list, which every caller reads as "nothing wrong".
+                        unregistered.Add(name);
+                    }
+                }
+            }
         }
 
         var results = new List<ScopeIntegrity>();
+        foreach (var name in unregistered)
+        {
+            results.Add(ScopeIntegrity.Unregistered(name));
+        }
+
         foreach (var scope in targets)
         {
             results.Add(await CheckScopeAsync(scope, repair, ct));
@@ -441,8 +475,7 @@ public sealed class KnowledgeService : IDisposable
                 var rel = Path.GetRelativePath(docsDir, file).Replace('\\', '/');
                 try
                 {
-                    onDisk[rel] = Convert.ToHexStringLower(
-                        System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(file, ct)));
+                    onDisk[rel] = await Store.NonBlockingFile.HashAsync(file, ct);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -1100,7 +1133,14 @@ public sealed class KnowledgeService : IDisposable
         {
             Watcher?.Dispose();
             PendingReindex?.Cancel();
-            IndexGate.Dispose();
+
+            // IndexGate is deliberately not disposed. A scope can be replaced
+            // (a changed documents directory) or the service shut down while an
+            // index pass still holds it, and that pass releases the gate from a
+            // finally — which would then throw ObjectDisposedException out of a
+            // finally block, and out of RebuildIndexAsync into an integrity
+            // check. SemaphoreSlim only needs disposal once its
+            // AvailableWaitHandle has been touched, which nothing here does.
         }
     }
 }

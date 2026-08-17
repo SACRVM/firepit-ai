@@ -119,13 +119,42 @@ public sealed class KnowledgeStoreLocationTests : IDisposable
     }
 
     [Fact]
-    public void APointerAtAnUncreatedDirectory_IsFineWhenItsParentExists()
+    public void APointerAtAnUncreatedDirectory_IsAlsoAnError()
     {
+        // Previously excused because the parent existed. But a typo in the last
+        // segment lands here just as readily as an intent to create it later,
+        // and the excused case indexes as an empty base that reports Ready —
+        // every search then answers "nothing known" with nothing to say it
+        // never looked. The directory is cheap to create; the silence is not.
         WritePointer(@"..\..\.firepit\not-written-yet");
 
         var resolved = KnowledgeLocator.Resolve(_project);
+        Assert.Contains("does not exist", resolved.Error);
+    }
+
+    [Fact]
+    public void ATrailingSeparator_DoesNotSurviveIntoTheDocsDir()
+    {
+        // GetFullPath keeps it, and every "is this path under the docs dir"
+        // test in the service compares against `dir + separator` — so a docs
+        // dir that already ends in one matches nothing. No document resolvable
+        // by path, every watcher event discarded, and an index file called
+        // ".db" inside the committed directory.
+        WritePointer(@"..\..\.firepit\appkit" + Path.DirectorySeparatorChar);
+
+        var resolved = KnowledgeLocator.Resolve(_project);
         Assert.Null(resolved.Error);
-        Assert.True(resolved.IsRedirected);
+        Assert.Equal(Path.TrimEndingDirectorySeparator(resolved.DocsDir), resolved.DocsDir);
+    }
+
+    [Fact]
+    public void APointerAtTheFirepitDirectoryItself_IsRefused()
+    {
+        // The generated knowledge-pinned.md lives in .firepit/, so this makes
+        // the digest one of the documents it is compiled from.
+        WritePointer(".");
+
+        Assert.Contains("contains the pointer itself", KnowledgeLocator.Resolve(_project).Error);
     }
 
     // --- behaviour -------------------------------------------------------

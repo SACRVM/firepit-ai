@@ -18,10 +18,34 @@ public sealed record KnowledgeStoreLocation(string DocsDir, string IndexPath, st
     public static KnowledgeStoreLocation For(string projectPath) =>
         For(projectPath, KnowledgeLocator.Resolve(projectPath).DocsDir);
 
+    /// <summary>
+    /// Layout for the shared base at the root of the meta repo.
+    /// </summary>
+    /// <remarks>
+    /// Everything here is a sibling of the documents directory, digest
+    /// included — and that last part is the whole point. The global base is not
+    /// any one project's knowledge, so deriving its digest from the meta
+    /// project's path (as <see cref="For(string, string)"/> does) gave it the
+    /// same <c>knowledge-pinned.md</c> as the meta project's own local scope.
+    /// Two scopes, one file, different documents: each pass overwrote the
+    /// other's, forever, and an integrity check reported "regenerated" on every
+    /// run without ever converging.
+    /// <para>
+    /// In the pre-split layout the two are the same directory anyway, so this
+    /// resolves to the historical path and nothing moves.
+    /// </para>
+    /// </remarks>
+    public static KnowledgeStoreLocation ForGlobal(string metaProjectPath)
+    {
+        var full = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(KnowledgeLayout.ResolveGlobalDocsDir(metaProjectPath)));
+        return new KnowledgeStoreLocation(full, full + ".db", full + "-pinned.md");
+    }
+
     /// <summary>Layout for an already-resolved docs directory.</summary>
     public static KnowledgeStoreLocation For(string projectPath, string docsDir)
     {
-        var full = Path.GetFullPath(docsDir);
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(docsDir));
         return new KnowledgeStoreLocation(
             full,
             // Sibling of the docs directory, same name plus .db. For a project

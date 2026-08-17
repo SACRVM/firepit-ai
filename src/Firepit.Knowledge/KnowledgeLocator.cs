@@ -63,7 +63,7 @@ public static class KnowledgeLocator
                     "make it a directory to keep the docs here, or put a path in it.");
             }
 
-            content = File.ReadAllText(knowledge);
+            content = Store.NonBlockingFile.ReadAllText(knowledge);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -80,7 +80,14 @@ public static class KnowledgeLocator
 
         // Relative to the .firepit directory holding the pointer, so moving
         // the whole repos tree keeps every pointer valid.
-        var resolved = Path.GetFullPath(Path.Combine(firepitDir, target));
+        //
+        // Trimmed: GetFullPath preserves a trailing separator, and a hand-typed
+        // "../shared/knowledge/" would then produce a docs dir that fails every
+        // `StartsWith(dir + separator)` test in the service — no document
+        // resolvable by path, every watcher event discarded, and an index file
+        // named ".db" inside the committed directory. All of it silent.
+        var resolved = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(Path.Combine(firepitDir, target)));
 
         if (File.Exists(resolved))
         {
@@ -89,23 +96,41 @@ public static class KnowledgeLocator
                 "directory — pointing at another pointer is not supported.");
         }
 
+        // A pointer aimed at the .firepit directory itself, or above it, puts
+        // the generated knowledge-pinned.md inside the documents it is compiled
+        // from — the digest indexes itself and grows on every pass.
+        if (SameOrContains(resolved, firepitDir))
+        {
+            return Fail(
+                $"'{knowledge}' points at '{resolved}', which contains the pointer itself. " +
+                "Point it at a directory that holds only knowledge documents.");
+        }
+
         if (!Directory.Exists(resolved))
         {
-            // Discriminate a typo from a directory that simply has not been
-            // written to yet: if the parent is missing the path is wrong, and
-            // saying so beats silently indexing an empty knowledge base.
-            var parent = Path.GetDirectoryName(resolved);
-            if (parent is null || !Directory.Exists(parent))
-            {
-                return Fail(
-                    $"'{knowledge}' points at '{resolved}', which does not exist and neither does " +
-                    "its parent. Check the path — it is relative to the .firepit directory.");
-            }
+            // Not "the parent exists, so it is probably fine". A typo in the
+            // last segment left the scope resolving to a directory that is
+            // never there, which indexes as an empty base and reports Ready —
+            // a search then answers "nothing known" about a subject the real
+            // base covers, and nothing in the answer admits the difference.
+            return Fail(
+                $"'{knowledge}' points at '{resolved}', which does not exist. Create that " +
+                "directory, or correct the path — it is relative to the .firepit directory.");
         }
 
         return new Resolution(resolved, IsRedirected: true);
 
         Resolution Fail(string message) => new(knowledge, false, message);
+    }
+
+    /// <summary>True when <paramref name="candidate"/> is <paramref name="inner"/>
+    /// or one of its ancestors.</summary>
+    private static bool SameOrContains(string candidate, string inner)
+    {
+        var c = Path.TrimEndingDirectorySeparator(candidate);
+        var i = Path.TrimEndingDirectorySeparator(inner);
+        return string.Equals(c, i, StringComparison.OrdinalIgnoreCase) ||
+               i.StartsWith(c + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FirstMeaningfulLine(string content)

@@ -89,6 +89,7 @@ public partial class MainWindow
             var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var byDocsDir = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // The base every project reads. It lives at the root of the meta
             // repo, not in its .firepit/ — what the administration holds about
@@ -97,11 +98,26 @@ public partial class MainWindow
             registrations.Add(new KnowledgeScopeRegistration(
                 KnowledgeService.GlobalScopeName,
                 metaPath,
-                KnowledgeStoreLocation.For(
-                    metaPath, KnowledgeLayout.ResolveGlobalDocsDir(metaPath))));
+                KnowledgeStoreLocation.ForGlobal(metaPath)));
             taken.Add(KnowledgeService.GlobalScopeName);
             byDocsDir[KnowledgeLayout.ResolveGlobalDocsDir(metaPath)] =
                 KnowledgeService.GlobalScopeName;
+
+            // Project names are the primary namespace: a shared base may not
+            // be named after a directory that some project already answers to.
+            // Without this a manual entry pointing at D:\private\notes\knowledge
+            // could claim the name "notes" before the project folder `notes`
+            // was reached, and the later registration would silently take the
+            // name back — routing the first project's writes into the second
+            // project's repository.
+            var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                KnowledgeService.GlobalScopeName,
+            };
+            foreach (var project in _allProjects)
+            {
+                reserved.Add(project.Name);
+            }
 
             if (legacyGlobal)
             {
@@ -135,10 +151,17 @@ public partial class MainWindow
                 }
 
                 var projectScope = project.Name;
-                if (aliases.ContainsKey(projectScope))
+
+                // Tracked separately from `aliases`, which now also holds
+                // configured-id entries: an id that happens to match another
+                // project's folder name would otherwise make that project look
+                // already-handled and drop it from registration entirely.
+                if (!handled.Add(projectScope))
                 {
                     continue;
                 }
+
+                var configuredId = ConfiguredId(project);
 
                 var resolution = KnowledgeLocator.Resolve(project.Path);
                 if (resolution.Error is { } error)
@@ -147,7 +170,15 @@ public partial class MainWindow
                     // back to the project's own folder would put research into
                     // the repo the pointer exists to keep it out of — better
                     // the tools report the scope as broken, and say why.
+                    // Recorded under the configured id too: that is the name the
+                    // session exports, so keying by folder name alone turned a
+                    // specific reason into a bare "unknown scope".
                     broken[projectScope] = error;
+                    if (configuredId is not null)
+                    {
+                        broken[configuredId] = error;
+                    }
+
                     Log.Error("Knowledge scope {Scope} disabled: {Reason}", projectScope, error);
                     continue;
                 }
@@ -155,6 +186,11 @@ public partial class MainWindow
                 if (resolution.IsRedirected)
                 {
                     redirected[projectScope] = resolution.DocsDir;
+                    if (configuredId is not null)
+                    {
+                        redirected[configuredId] = resolution.DocsDir;
+                    }
+
                     ExcludePinnedDigest(project, resolution.DocsDir);
                 }
 
@@ -172,17 +208,45 @@ public partial class MainWindow
                 // A shared base is named after the directory it lives in, so
                 // five appkit repos read as one "appkit" rather than as
                 // whichever member happened to be discovered first. Falls back
-                // to the project name if that would collide.
+                // to the project name if that name belongs to something else.
                 var scopeName = projectScope;
                 if (resolution.IsRedirected &&
                     BaseNameFor(resolution.DocsDir) is { } folder &&
-                    !taken.Contains(folder))
+                    !taken.Contains(folder) &&
+                    !reserved.Contains(folder))
                 {
                     scopeName = folder;
+                }
+                else if (taken.Contains(scopeName))
+                {
+                    // Two scopes cannot share a name: registration is
+                    // last-wins, so the loser's documents would be reachable
+                    // under no name at all while every search using it silently
+                    // read the winner's directory. A project folder called
+                    // "global" is the case that matters — it would replace the
+                    // shared base for every project in the tree.
+                    var unique = scopeName;
+                    for (var n = 2; taken.Contains(unique); n++)
+                    {
+                        unique = $"{scopeName}-{n}";
+                    }
+
+                    Log.Warning(
+                        "Knowledge scope name '{Wanted}' is already in use; registering {Project} " +
+                        "as '{Actual}'", scopeName, projectScope, unique);
+                    scopeName = unique;
                 }
 
                 taken.Add(scopeName);
                 aliases[projectScope] = scopeName;
+
+                // Also under the scope's own name: a shared base is addressed
+                // by that, and the hint has to know the documents are not in
+                // the caller's repo whichever name the caller used.
+                if (resolution.IsRedirected)
+                {
+                    redirected[scopeName] = resolution.DocsDir;
+                }
 
                 // A session exports FIREPIT_PROJECT_NAME from the configured
                 // id when there is one, so an agent asks under a name the
@@ -192,10 +256,13 @@ public partial class MainWindow
                 // own base not existing, which teaches the agent to ignore
                 // warnings. Same defect 0.14.1 fixed in the project registry,
                 // one layer down.
-                if (ConfiguredId(project) is { } id && !aliases.ContainsKey(id))
+                // Never over an entry that already exists: a project's own
+                // name always wins over another project's configured id.
+                if (configuredId is { } id && !aliases.ContainsKey(id))
                 {
                     aliases[id] = scopeName;
                 }
+
                 byDocsDir[resolution.DocsDir] = scopeName;
                 registrations.Add(new KnowledgeScopeRegistration(
                     scopeName,
@@ -322,18 +389,35 @@ public partial class MainWindow
     /// </summary>
     private string SaveHint(string scopeName, string wrote)
     {
-        var scope = scopeName;
-        return _redirectedKnowledgeScopes.TryGetValue(scope, out var dir)
+        // Looked up under both the name the caller used and the scope it maps
+        // to. A redirected repo with a configured id used to miss here and get
+        // told "remember to commit the file" — instructing the agent to commit
+        // research into the public repository the pointer exists to keep it
+        // out of.
+        return TryRedirect(scopeName, out var dir) || TryRedirect(MapToScopeName(scopeName), out dir)
             ? $"{wrote} Stored at {dir}, outside this repo — commit it there."
             : $"{wrote} Remember to commit the file.";
+
+        bool TryRedirect(string name, out string target) =>
+            _redirectedKnowledgeScopes.TryGetValue(name, out target!);
     }
 
     /// <summary>Why a scope is missing, when it is missing on purpose.</summary>
-    private string? BrokenScopeReason(string? scopeName) =>
-        scopeName is not null &&
-        _brokenKnowledgeScopes.TryGetValue(scopeName, out var reason)
-            ? $"Knowledge is disabled for '{scopeName}': {reason}"
-            : null;
+    private string? BrokenScopeReason(string? scopeName)
+    {
+        if (scopeName is null)
+        {
+            return null;
+        }
+
+        if (!_brokenKnowledgeScopes.TryGetValue(scopeName, out var reason) &&
+            !_brokenKnowledgeScopes.TryGetValue(MapToScopeName(scopeName), out reason))
+        {
+            return null;
+        }
+
+        return $"Knowledge is disabled for '{scopeName}': {reason}";
+    }
 
     // --- IMcpBackend knowledge members -----------------------------------
 

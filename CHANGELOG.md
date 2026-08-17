@@ -5,6 +5,115 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-08-17
+
+An audit of the knowledge and blueprint changes from 0.21.0–0.24.0, by a
+reviewer working from the code rather than from the intent. It confirmed six of
+seven claimed guarantees, refuted one, and found ten defects — most of them the
+same shape: a subsystem answering "nothing is wrong" when the truthful answer
+was "nothing was checked".
+
+### Fixed
+
+- **An index pass could make a save fail.** `File.ReadAllBytes` opens with
+  `FileShare.Read`, which blocks writers. So while the indexer was reading a
+  document — a pure derived-data operation — `firepit_knowledge_update` on that
+  file threw *"the process cannot access the file because it is being used by
+  another process"*. It reached CI as a test failure on main.
+
+  Every read on the index side now goes through `NonBlockingFile`
+  (`FileShare.ReadWrite | Delete`). The markdown is the truth and the index is
+  derived from it; a reader must never be the reason the author cannot write.
+  A torn read is self-correcting — the hash will not match, and the write's
+  modification time brings the next pass round again. A failed save is not: the
+  caller has already been told it did not work.
+
+- **The shared base and the meta project's own knowledge wrote to one
+  `knowledge-pinned.md`.** Both scopes have the meta repo as their project
+  path, and the digest was derived from that path alone. Two scopes, different
+  documents, one file: each index pass overwrote the other's digest, forever.
+  The meta project's `@.firepit/knowledge-pinned.md` import was a coin flip, and
+  an integrity check reported "regenerated knowledge-pinned.md" on every single
+  run without ever converging. The global scope's digest is now a sibling of its
+  documents, like its index. In the pre-split layout the two resolve to the same
+  path they always had, so nothing moves.
+
+- **`firepit_integrity_check` reported "sound" for a scope that does not
+  exist.** An unknown scope name was silently dropped from the result list, and
+  an empty list read as "no findings". If scope registration had failed — one
+  throw in the sync loop is enough — the check would have declared every project
+  healthy while no search could answer at all. Unregistered scopes are now a
+  reported error, and a knowledge service that failed to start is one too.
+
+- **One project's failure discarded the whole integrity pass.** A CLAUDE.md held
+  open by an editor threw out of the per-project body, and the outer handler
+  returned an empty results list — which reads as "nothing to report". Each
+  project is now checked independently and a failure becomes a finding on that
+  project.
+
+- **A project folder name could take over a scope that was already claimed,
+  including `global`.** Registration is last-wins, and the collision guard was
+  consulted on only one of the two naming paths. A project folder literally
+  named `global` would have replaced the shared base for every project in the
+  tree, silently, because the name still resolved. Project names are now
+  reserved before any shared base is named after its directory, and a genuine
+  collision gets a distinct name and a warning in the log.
+
+- **The "commit it there" hint missed whenever a project had a configured
+  `id`.** Sessions export `FIREPIT_PROJECT_NAME` from the id, but the redirect
+  and broken-scope maps were keyed by folder name. A redirected public repo
+  therefore got the default hint — *"Remember to commit the file"* — telling the
+  agent to commit research into the very repository the pointer exists to keep
+  it out of.
+
+- **A trailing separator in a pointer file disabled the scope in silence.**
+  `GetFullPath` preserves it, and every "is this inside the documents
+  directory" test compares against `dir + separator`. `firepit_knowledge_get`,
+  `_update` and `_delete` answered "No document" for files search had just
+  returned, every watcher event was discarded, and the index landed as a hidden
+  `.db` file inside the committed documents directory.
+
+- **A pointer at a directory that does not exist indexed as an empty base.**
+  Only a missing *parent* was treated as an error, so a typo in the last segment
+  resolved cleanly, indexed nothing, and reported `Ready`. Searches then
+  answered "nothing known" about subjects the real base covers. A pointer must
+  now land on a directory that exists, and one aimed at the `.firepit` directory
+  itself — which would make the generated digest one of its own documents — is
+  refused.
+
+- **An offline machine reported every private repo as dangerously
+  misconfigured.** `GitHubVisibility` defaults to `Public` when it cannot read
+  the answer, which is right for *choosing* a policy fragment and wrong for
+  *auditing* one. Without `gh`, without auth, or without a network, the
+  integrity check raised an `error` on correctly configured private repos:
+  *"This repository is PUBLIC but imports the private policy fragment."* The
+  guess and the reading are now distinguishable, and an unread visibility
+  produces a warning that says so. `gh` missing is also latched, instead of
+  costing one process launch and one timeout per project.
+
+- **The overlap finding only ever reached the victim.** Nesting one scope's
+  documents inside another's is a relationship between two scopes, but only the
+  nested half was told. Asking about the base that was quietly absorbing another
+  project's research returned no findings at all.
+
+- Two crashes with no user-visible cause: the knowledge safety sweep runs on a
+  timer callback, where an escaping exception takes down the process rather than
+  failing a request; and disposing a scope while an index pass held its gate
+  threw `ObjectDisposedException` out of a `finally` block.
+
+- `firepit_blueprint_apply` now refuses to create a directory over a knowledge
+  pointer at the call site, not only in the survey that precedes it — closing
+  the window 0.24.0 left between the two.
+
+- Duplicate project names (a manual entry outside the root beside a discovered
+  folder of the same name) threw `ArgumentException` from inside the integrity
+  check.
+
+### Changed
+
+- Overlap detection moved out of the WPF shell into `Firepit.Knowledge`, so its
+  tests exercise the code that ships instead of a copy of the algorithm.
+
 ## [0.24.0] — 2026-08-17
 
 All three reported from a rollout across 38 projects.

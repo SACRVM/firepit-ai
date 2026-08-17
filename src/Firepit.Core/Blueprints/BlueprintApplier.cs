@@ -119,6 +119,22 @@ public static class BlueprintApplier
 
         foreach (var rel in check.MissingFiles)
         {
+            // Second guard, not a redundant one. Check already filters files
+            // inside a redirected knowledge directory, but this is the only
+            // call in Apply that creates a directory on a project-relative
+            // path — and creating one over the pointer file is what silently
+            // undid a redirect and sent a public repo's research back into it.
+            // Nothing about that failure is visible at the time it happens, so
+            // the refusal belongs at the call, not only at the survey.
+            if (KnowledgeRedirect.IsInsideKnowledgeDir(rel) &&
+                KnowledgeRedirect.IsRedirected(projectPath))
+            {
+                warnings.Add(
+                    $"skipped {rel}: this project's knowledge is redirected by " +
+                    $"{KnowledgeRedirect.KnowledgePath}, which is a file, not a directory");
+                continue;
+            }
+
             var file = blueprint.Files.First(f => f.RelativePath == rel);
             var target = TargetPath(projectPath, file);
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);

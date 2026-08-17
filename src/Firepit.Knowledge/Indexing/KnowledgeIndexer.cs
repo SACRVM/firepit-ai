@@ -66,7 +66,8 @@ public sealed class KnowledgeIndexer
             byte[] bytes;
             try
             {
-                bytes = await File.ReadAllBytesAsync(file, ct);
+                // Non-blocking: an index pass must never make a save fail.
+                bytes = await Store.NonBlockingFile.ReadAllBytesAsync(file, ct);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

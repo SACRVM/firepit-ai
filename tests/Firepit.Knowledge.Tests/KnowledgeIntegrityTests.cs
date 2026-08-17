@@ -46,6 +46,24 @@ public sealed class KnowledgeIntegrityTests : IDisposable
     }
 
     [Fact]
+    public async Task AScopeThatIsNotRegistered_IsReportedNotDropped()
+    {
+        // The empty-result-means-nothing-wrong shape. An unknown name used to
+        // be filtered out, so the caller got an empty list and reported the
+        // project sound — while every search against that name answered from
+        // nothing. If scope sync fails, this is the state every project is in.
+        await SeedAndIndex("one.md");
+
+        var results = await _service.CheckIntegrityAsync(["project", "never-registered"]);
+
+        var missing = Assert.Single(results, r => !r.IsRegistered);
+        Assert.Equal("never-registered", missing.Scope);
+        Assert.False(missing.Sound);
+        Assert.Contains("no knowledge scope named", string.Join(" ", missing.Describe()));
+        Assert.True(Assert.Single(results, r => r.Scope == "project").Sound);
+    }
+
+    [Fact]
     public async Task AFullyIndexedScope_IsSound()
     {
         await SeedAndIndex("one.md", "two.md");

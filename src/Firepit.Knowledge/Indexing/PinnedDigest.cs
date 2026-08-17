@@ -43,7 +43,7 @@ internal static class PinnedDigest
                 string text;
                 try
                 {
-                    text = File.ReadAllText(file);
+                    text = Store.NonBlockingFile.ReadAllText(file);
                 }
                 catch (IOException)
                 {
@@ -66,7 +66,7 @@ internal static class PinnedDigest
         {
             try
             {
-                existing = File.ReadAllText(digestPath);
+                existing = Store.NonBlockingFile.ReadAllText(digestPath);
             }
             catch (IOException)
             {

@@ -67,18 +67,28 @@ public static class FragmentIntegrity
             }
         }
 
-        var visibility = GitHubVisibility.Detect(projectPath);
-        var expected = visibility switch
-        {
-            RepoVisibility.Public => FirepitFragments.PublicFileName,
-            RepoVisibility.Private => FirepitFragments.PrivateFileName,
-            _ => null,
-        };
+        var inspection = GitHubVisibility.Inspect(projectPath);
+        var visibility = inspection.Value;
 
         var importsPublic = claudeMd.Contains(FirepitFragments.PublicFileName, StringComparison.OrdinalIgnoreCase);
         var importsPrivate = claudeMd.Contains(FirepitFragments.PrivateFileName, StringComparison.OrdinalIgnoreCase);
 
-        if (expected is null && (importsPublic || importsPrivate))
+        if (!inspection.Certain)
+        {
+            // The value is the fail-safe guess, not a reading. Auditing against
+            // it would tell every correctly-configured private repo, on any
+            // machine without `gh` or without a network, that it is PUBLIC and
+            // dangerously misconfigured. Say what is actually known instead.
+            if (importsPublic || importsPrivate)
+            {
+                findings.Add(new FragmentFinding(
+                    "warning",
+                    "This repository's GitHub visibility could not be read, so its policy fragment " +
+                    "was not verified against it.",
+                    "check `gh auth status`, then re-run the check"));
+            }
+        }
+        else if (visibility == RepoVisibility.None && (importsPublic || importsPrivate))
         {
             findings.Add(new FragmentFinding(
                 "warning",
