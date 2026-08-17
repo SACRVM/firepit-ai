@@ -72,3 +72,8 @@ coverage/
 *.stackdump
 
 # (Inno Setup output now lives under bin/installer — covered by `bin/` above)
+
+# Firepit + Claude Code — shared config versioned, runtime/personal local
+.firepit/knowledge.db*
+!.firepit/config.json
+.claude/settings.local.json
