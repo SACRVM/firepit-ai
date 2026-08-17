@@ -43,6 +43,12 @@ public sealed class KnowledgeIntegrityTests : IDisposable
 
         _service.SyncScopes([new KnowledgeScopeRegistration("project", _project)]);
         await _service.AddDocumentAsync("project", "Seed", "Forces a synchronous index pass.");
+
+        // Those writes also raised watcher events, each scheduling a debounced
+        // pass. Left pending, one lands in the middle of a later check and
+        // repairs the drift the test just introduced — which is what failed on
+        // CI while passing here.
+        await _service.WaitForPendingWorkAsync();
     }
 
     [Fact]

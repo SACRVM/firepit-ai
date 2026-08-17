@@ -879,7 +879,7 @@ public sealed class KnowledgeService : IDisposable
         }
 
         var token = cts.Token;
-        _ = Task.Run(
+        var task = Task.Run(
             async () =>
             {
                 try
@@ -896,6 +896,44 @@ public sealed class KnowledgeService : IDisposable
                 }
             },
             token);
+
+        lock (_scopesGate)
+        {
+            scope.PendingTask = task;
+        }
+    }
+
+    /// <summary>
+    /// Completes once no debounced index pass is still pending or running.
+    /// </summary>
+    /// <remarks>
+    /// For tests. Every write raises a watcher event that schedules a pass
+    /// <see cref="DebounceMs"/> later, so a test that inspects the index inside
+    /// that window can have its observation changed underneath it — which is
+    /// how two integrity tests passed on one machine and failed on CI. Waiting
+    /// on the actual task is deterministic; sleeping for longer than the
+    /// debounce only makes the race less likely.
+    /// </remarks>
+    internal async Task WaitForPendingWorkAsync()
+    {
+        for (var round = 0; round < 10; round++)
+        {
+            List<Task> pending;
+            lock (_scopesGate)
+            {
+                pending = [.. _scopes.Values.Select(s => s.PendingTask).OfType<Task>()
+                    .Where(t => !t.IsCompleted)];
+            }
+
+            if (pending.Count == 0)
+            {
+                return;
+            }
+
+            // A pass can schedule the next one (a retry, or a write of its own),
+            // so this loops rather than awaiting a single snapshot.
+            await Task.WhenAll(pending).ConfigureAwait(false);
+        }
     }
 
     private async Task ReindexScopeAsync(Scope scope, CancellationToken ct)
@@ -1146,6 +1184,10 @@ public sealed class KnowledgeService : IDisposable
         public string? FailureReason { get; set; }
         public SemaphoreSlim IndexGate { get; } = new(1, 1);
         public CancellationTokenSource? PendingReindex { get; set; }
+
+        /// <summary>The debounced pass itself, so a caller can wait for it
+        /// rather than for a duration. See <see cref="WaitForPendingWorkAsync"/>.</summary>
+        public Task? PendingTask { get; set; }
 
         public void Dispose()
         {

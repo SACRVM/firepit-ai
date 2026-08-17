@@ -5,6 +5,23 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.25.3] — 2026-08-17
+
+0.25.1 and 0.25.2 published no artifacts — both tag builds failed on the same
+test, and 0.25.2's fix for it was aimed at the wrong cause. This ships their
+content.
+
+### Fixed
+
+- **A test could have its own observation repaired underneath it.** Every write
+  raises a watcher event that schedules an index pass 750ms later. Two integrity
+  tests introduced drift inside that window, so the pending pass landed during
+  the check and repaired what the test was about to assert on — passing on one
+  machine and failing on CI, where the check runs long enough for the pass to
+  win. `KnowledgeService` now exposes the pending pass so a caller can wait for
+  the work rather than for a duration; sleeping longer than the debounce only
+  makes such a race less likely, which is what the first attempt did.
+
 ## [0.25.2] — 2026-08-17
 
 Ships what 0.25.1 contained — its tag build failed on a flaky test, so no
