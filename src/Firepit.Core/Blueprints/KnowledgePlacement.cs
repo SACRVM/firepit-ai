@@ -88,14 +88,23 @@ public static class KnowledgePlacement
         }
 
         // Rule 2 — a redirected repo does not version the generated digest.
-        if (redirected &&
-            isTracked(projectPath, ".firepit/knowledge-pinned.md"))
+        //
+        // Severity follows the stakes, not the rule. In a public repo this
+        // carries private text into a place anyone can read; in a private one
+        // it is derived data churning in git, which is untidy and not a leak.
+        // Grading both as errors would dilute the ones that matter.
+        if (redirected && isTracked(projectPath, ".firepit/knowledge-pinned.md"))
         {
+            var isPublic = seen.Value == RepoVisibility.Public && seen.Certain;
             findings.Add(new Finding(
-                "error",
-                "knowledge-pinned.md is versioned here, but this project's documents live " +
-                "outside the repo on purpose. The digest is compiled from them, so committing " +
-                "it carries their text back in.",
+                isPublic ? "error" : "warning",
+                isPublic
+                    ? "knowledge-pinned.md is versioned in this public repo, but the documents " +
+                      "it is compiled from live outside it on purpose. Committing the digest " +
+                      "carries their text back in, where anyone can read it."
+                    : "knowledge-pinned.md is versioned here, but it is generated from " +
+                      "documents that live outside this repo — so it changes whenever they do, " +
+                      "for a file nothing here authors.",
                 "git rm --cached .firepit/knowledge-pinned.md — the file stays on disk for " +
                 "CLAUDE.md to import"));
         }

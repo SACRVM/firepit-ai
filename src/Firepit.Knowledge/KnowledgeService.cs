@@ -965,19 +965,28 @@ public sealed class KnowledgeService : IDisposable
 
             // A documents directory that is simply not there yet is the normal
             // state of most projects, and answering "nothing known" for one is
-            // correct. A directory that held documents and is now gone is not
-            // the same thing: the pass deletes every row and then reports a
-            // healthy, empty base — a search says nothing, and nothing in the
-            // answer distinguishes that from a base that was always empty.
-            if (stats.Removed > 0 && !Directory.Exists(scope.Store.KnowledgeDir))
+            // correct. A directory that held documents and is now gone is not:
+            // a search says nothing, and nothing in the answer distinguishes
+            // that from a base that was always empty.
+            //
+            // Keyed on the index file existing, not on documents having been
+            // dropped *this pass*. The first pass after the directory goes away
+            // empties the index, so "dropped something" is true exactly once —
+            // the next sweep finds nothing left to drop, calls the pass
+            // complete, and the scope goes quiet with its base still missing.
+            // The index file is what separates the two cases: a project that
+            // never opted into knowledge has neither, and the indexer stays
+            // inert rather than creating one. So a missing directory beside an
+            // existing index means the directory was there and went away.
+            if (!Directory.Exists(scope.Store.KnowledgeDir) && scope.Store.IndexExists)
             {
                 scope.Health = ScopeHealth.Failed;
                 scope.FailureReason =
-                    $"the documents directory '{scope.Store.KnowledgeDir}' no longer exists, " +
-                    $"and {stats.Removed} document(s) were dropped from the index";
+                    $"the documents directory '{scope.Store.KnowledgeDir}' does not exist, " +
+                    "but this scope has an index — its documents were moved or deleted";
                 _logger.LogError(
-                    "Knowledge scope {Scope}: {Dir} disappeared; {Removed} document(s) dropped",
-                    scope.Name, scope.Store.KnowledgeDir, stats.Removed);
+                    "Knowledge scope {Scope}: {Dir} is missing while an index exists",
+                    scope.Name, scope.Store.KnowledgeDir);
                 return;
             }
 

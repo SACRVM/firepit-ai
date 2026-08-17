@@ -72,9 +72,15 @@ public partial class MainWindow
             {
                 // README.md is the blueprint's own seed and regenerates; it is
                 // not content and does not travel to the hosted store.
+                //
+                // Counts *.md, matching KnowledgePlacement.Check. Counting every
+                // file here would refuse over a stray non-document that the
+                // check calls clean — the two would disagree about the same
+                // directory, and the move that resolves it takes anything else
+                // along anyway.
                 var readme = Path.Combine(local, "README.md");
                 var documents = Directory
-                    .EnumerateFiles(local, "*", SearchOption.AllDirectories)
+                    .EnumerateFiles(local, "*.md", SearchOption.AllDirectories)
                     .Where(f => !string.Equals(f, readme, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 

@@ -101,15 +101,26 @@ public sealed class KnowledgePlacementTests : IDisposable
     }
 
     [Fact]
-    public void ATrackedDigestInARedirectedRepo_IsAnError()
+    public void ATrackedDigestInARedirectedPublicRepo_IsAnError()
     {
         // Generated from documents that deliberately live elsewhere, so
-        // committing it carries their text back into the repo.
+        // committing it carries their text back into a public repo.
         WritePointer();
 
-        var f = Assert.Single(Check(digestTracked: true));
+        var f = Assert.Single(Check(digestTracked: true, seen: RepoVisibility.Public));
         Assert.Equal("error", f.Severity);
-        Assert.Contains("knowledge-pinned.md", f.Message);
+        Assert.Contains("anyone can read", f.Message);
+    }
+
+    [Fact]
+    public void ATrackedDigestInARedirectedPrivateRepo_IsOnlyAWarning()
+    {
+        // Same rule, different stakes: derived data churning in git, not a
+        // leak. Grading it as an error would dilute the ones that are.
+        WritePointer();
+
+        var f = Assert.Single(Check(digestTracked: true, seen: RepoVisibility.Private));
+        Assert.Equal("warning", f.Severity);
     }
 
     [Fact]

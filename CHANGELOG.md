@@ -5,6 +5,33 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.26.1] — 2026-08-17
+
+A logic pass over the day's own fixes. Three held badly.
+
+### Fixed
+
+- **The "your knowledge base disappeared" alarm rang exactly once.** The rule
+  added in 0.25.1 fired on "documents were dropped from the index this pass" —
+  which is true for the first pass after the directory goes away and never
+  again. The next safety sweep found nothing left to drop, called the pass
+  complete, and set the scope back to `Ready` while its base was still missing.
+  A two-minute alarm, then the same silence the rule was written to end. It is
+  now keyed on the index file existing beside a missing directory, which stays
+  true, and the test sweeps twice.
+
+- **The placement check and the blueprint disagreed about what a document is.**
+  The check counted `*.md`; the apply counted every file. A public repo with a
+  stray non-document in its knowledge directory was reported clean and then
+  refused conversion, with no way to reconcile the two answers. Both count
+  markdown now — a move takes anything else along regardless.
+
+- **A tracked `knowledge-pinned.md` was graded an error in every redirected
+  repo.** In a public one it carries private text somewhere anyone can read; in
+  a private one it is derived data churning in git. Same rule, different stakes,
+  and grading both as errors dilutes the ones that matter. Public stays an
+  error, private is a warning.
+
 ## [0.26.0] — 2026-08-17
 
 The rule that was written down but never enforced: a public repository does not

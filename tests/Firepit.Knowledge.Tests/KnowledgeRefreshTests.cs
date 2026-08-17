@@ -130,6 +130,17 @@ public sealed class KnowledgeRefreshTests : IDisposable
         var result = await _service.SearchAsync("Vanishing", ["project"], 5);
         Assert.Empty(result.Hits);
         Assert.NotEmpty(result.Warnings ?? []);
+
+        // And it stays failed. The first pass empties the index, so a rule
+        // keyed on "documents were dropped this pass" is true exactly once —
+        // the next sweep finds nothing to drop, calls the pass complete, and
+        // the scope goes quiet again while its base is still gone.
+        _service.SafetySweep();
+        await _service.WaitForPendingWorkAsync();
+
+        Assert.Equal(
+            ScopeHealth.Failed,
+            (await _service.CheckIntegrityAsync(["project"])).Single().Health);
     }
 
     [Fact]
