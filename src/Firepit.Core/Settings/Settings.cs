@@ -155,10 +155,17 @@ public sealed record ShellsSettings(string Preferred, string Editor = "code")
 /// strictly higher version appears. Set <see cref="CheckForUpdates"/> to false
 /// to opt out entirely.
 /// </summary>
+/// <param name="LastSuccessfulCheckUtc">
+/// Round-trip timestamp of the last check that actually reached GitHub.
+/// Persisted so "no update available" and "we have not managed to ask in three
+/// weeks" stop looking the same from the outside — a badge that only appears
+/// on good news says nothing at all when the news cannot be fetched.
+/// </param>
 public sealed record UpdateSettings(
     bool CheckForUpdates = true,
     int CheckIntervalHours = 4,
-    string? IgnoredVersion = null)
+    string? IgnoredVersion = null,
+    string? LastSuccessfulCheckUtc = null)
 {
     public static readonly UpdateSettings Defaults = new();
 }

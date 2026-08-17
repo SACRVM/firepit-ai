@@ -32,6 +32,11 @@ public partial class MainWindow
     private UpdateInfo? _availableUpdate;
     private bool _updateInstallInProgress;
 
+    // Why the most recent attempt failed, or null if it succeeded. Without
+    // this the About dialog would report a silently failing background check
+    // as "up to date" — the exact thing it was added to stop.
+    private string? _lastUpdateError;
+
     private static HttpClient CreateUpdateHttp()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
@@ -73,33 +78,121 @@ public partial class MainWindow
 
     private async Task RunUpdateCheckAsync(Version current, TimeSpan delay)
     {
-        if (_updateChecker is null) return;
+        if (delay > TimeSpan.Zero)
+        {
+            await Task.Delay(delay).ConfigureAwait(true);
+        }
+
+        await CheckForUpdateAsync(respectIgnoredVersion: true).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Asks GitHub whether a newer release exists, and records the answer —
+    /// including a failure, which the badge alone cannot express.
+    /// </summary>
+    /// <param name="respectIgnoredVersion">
+    /// False when the user asked explicitly. Someone who presses "Check now"
+    /// wants the current answer, not the one they silenced three versions ago.
+    /// </param>
+    internal async Task<UpdateCheckOutcome> CheckForUpdateAsync(bool respectIgnoredVersion)
+    {
+        var current = typeof(MainWindow).Assembly.GetName().Version;
+        var checker = _updateChecker ??= current is null
+            ? null
+            : new GitHubUpdateChecker(UpdateHttp, UpdateOwner, UpdateRepo,
+                log: m => Log.Information("Update: {Message}", m));
+
+        if (checker is null || current is null)
+        {
+            return new UpdateCheckOutcome(null, "This build carries no version to compare.", LastSuccessfulCheck());
+        }
+
         try
         {
-            if (delay > TimeSpan.Zero)
+            var info = await checker.CheckAsync(current, CancellationToken.None).ConfigureAwait(true);
+            var now = DateTimeOffset.UtcNow;
+            _lastUpdateError = null;
+            RecordSuccessfulCheck(now);
+            if (_disposedUpdates)
             {
-                await Task.Delay(delay).ConfigureAwait(true);
+                return new UpdateCheckOutcome(info, null, now);
             }
 
-            var info = await _updateChecker.CheckAsync(current, CancellationToken.None).ConfigureAwait(true);
-            if (info is null || _disposedUpdates) return;
+            if (info is null)
+            {
+                Log.Information("Update check: {Current} is current", current);
+                return new UpdateCheckOutcome(null, null, now);
+            }
 
             var ignored = (_settings.Updates ?? UpdateSettings.Defaults).IgnoredVersion;
-            if (ignored is not null
+            if (respectIgnoredVersion
+                && ignored is not null
                 && Version.TryParse(ignored, out var iv)
                 && info.Version <= new Version(iv.Major, iv.Minor, Math.Max(0, iv.Build)))
             {
                 Log.Information("Update {Version} available but ignored by user", info.Version);
-                return;
+                return new UpdateCheckOutcome(null, null, now);
             }
 
             Log.Information("Update available: {Version} (current {Current})", info.Version, current);
             ShowUpdateBadge(info);
+            return new UpdateCheckOutcome(info, null, now);
         }
         catch (Exception ex)
         {
-            // A failed update check must never disrupt the app.
+            // A failed update check must never disrupt the app — but it must
+            // also stop being invisible. The badge cannot show a failure, so
+            // the outcome carries it to whoever asked.
             Log.Information(ex, "Update check failed (non-fatal)");
+            _lastUpdateError = ex.Message;
+            return new UpdateCheckOutcome(null, ex.Message, LastSuccessfulCheck());
+        }
+    }
+
+    /// <summary>
+    /// What the background checks already know, so the About dialog can answer
+    /// immediately instead of making the user wait for a round trip to say
+    /// something it could have said at once.
+    /// </summary>
+    private UpdateCheckOutcome KnownUpdateState()
+    {
+        var cfg = _settings.Updates ?? UpdateSettings.Defaults;
+        if (!cfg.CheckForUpdates)
+        {
+            return new UpdateCheckOutcome(
+                null, "Automatic checks are off (updates.checkForUpdates in settings.json).",
+                LastSuccessfulCheck());
+        }
+
+        return new UpdateCheckOutcome(_availableUpdate, _lastUpdateError, LastSuccessfulCheck());
+    }
+
+    private DateTimeOffset? LastSuccessfulCheck()
+    {
+        var raw = (_settings.Updates ?? UpdateSettings.Defaults).LastSuccessfulCheckUtc;
+        return DateTimeOffset.TryParse(
+            raw, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private void RecordSuccessfulCheck(DateTimeOffset at)
+    {
+        var updates = _settings.Updates ?? UpdateSettings.Defaults;
+        _settings = _settings with
+        {
+            Updates = updates with { LastSuccessfulCheckUtc = at.ToString("O") },
+        };
+        try
+        {
+            _settingsStore.Save(_settings);
+        }
+        catch (Exception ex)
+        {
+            // Losing the timestamp costs a slightly vaguer message later, not
+            // an update.
+            Log.Debug(ex, "Could not persist the last update-check time");
         }
     }
 

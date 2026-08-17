@@ -1581,7 +1581,18 @@ public partial class MainWindow : Window
 
     private void OnAboutClick(object sender, RoutedEventArgs e)
     {
-        var about = new AboutDialog { Owner = this };
+        // An explicit check ignores the ignored-version list: someone pressing
+        // the button wants today's answer, not the one they silenced.
+        var about = new AboutDialog(
+            check: () => CheckForUpdateAsync(respectIgnoredVersion: false),
+            install: info => _ = InstallUpdateAsync(
+                info,
+                canSelfUpdate: !string.IsNullOrEmpty(info.InstallerAssetUrl)
+                               && Firepit.Updates.UpdateInstaller.TryGetInnoInstallDir(out _)),
+            lastKnown: KnownUpdateState())
+        {
+            Owner = this,
+        };
         Views.DialogSizing.Apply(about, AboutDialog.DesignWidth);
         about.ShowDialog();
     }

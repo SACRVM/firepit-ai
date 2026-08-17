@@ -92,12 +92,61 @@
                        HorizontalAlignment="Center"
                        Margin="0,18,0,0" />
 
+            <TextBlock x:Name="UpdateStateText"
+                       Foreground="#8C7A5C"
+                       FontFamily="Cascadia Code, Consolas, Courier New"
+                       FontSize="{DynamicResource SmallFontSize}"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       Margin="0,6,0,0" />
+
+            <Button x:Name="UpdateActionButton"
+                    Content="Check now"
+                    HorizontalAlignment="Center"
+                    Margin="0,10,0,0"
+                    MinWidth="130"
+                    Click="OnUpdateActionClick">
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Background" Value="#221C16" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Foreground" Value="#E8E2D8" />
+                        <Setter Property="FontFamily" Value="Cascadia Code, Consolas, Courier New" />
+                        <Setter Property="FontSize" Value="{DynamicResource BaseFontSize}" />
+                        <Setter Property="Padding" Value="12,6" />
+                        <Setter Property="Cursor" Value="Hand" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="4"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#2A211A" TargetName="Bd" />
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Foreground" Value="#5A5148" />
+                                            <Setter Property="Cursor" Value="Arrow" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Button.Style>
+            </Button>
+
             <TextBlock Text="MIT licensed"
                        Foreground="#8C7A5C"
                        FontFamily="Cascadia Code, Consolas, Courier New"
                        FontSize="{DynamicResource SmallFontSize}"
                        HorizontalAlignment="Center"
-                       Margin="0,4,0,0" />
+                       Margin="0,20,0,0" />
 
             <TextBlock Text="by SACRVM"
                        Foreground="#8C7A5C"

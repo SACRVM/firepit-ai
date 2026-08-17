@@ -5,6 +5,35 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-08-17
+
+### Added
+
+- **"Check now" in the About dialog, and a state line above it.** The version
+  was already there; whether it is the current one now sits next to it.
+
+  The reason is not convenience. The caption-bar badge is a one-way channel
+  that only appears on good news — so a check that fails, every time, for
+  weeks, leaves the badge hidden, which looks exactly like being up to date.
+  An installation could sit on an old version indefinitely and never show a
+  sign of it.
+
+  Four states, and the fourth is the point:
+
+  - `✓ Up to date · checked 09:41`
+  - `↑ 0.24.0 is available` — the button becomes *Update now* and runs the
+    same install the badge does
+  - `Checking…`
+  - `⚠ Could not check · last succeeded 9 days ago`
+
+  The last successful check is persisted (`updates.lastSuccessfulCheckUtc`),
+  so the age survives a restart — which is what turns the warning from a
+  nuisance into a number worth looking at.
+
+  Pressing the button ignores the ignored-version list. Someone asking
+  explicitly wants today's answer, not the one they silenced three releases
+  ago.
+
 ## [0.22.0] — 2026-08-17
 
 ### Added
