@@ -5,6 +5,43 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-08-17
+
+### Added
+
+- **A project settings dialog.** Left-click Configure in the tab toolbar; the
+  right-click menu still opens `config.json` directly for everything the
+  dialog does not cover. It owns one setting so far — where this project's
+  knowledge lives — because that one otherwise means hand-writing a relative
+  path into `.firepit/knowledge` and getting the `../..` right.
+
+  Three choices: in this repo, hosted privately in the `.firepit` repo, or
+  any other folder. Existing documents move with the setting, the dialog
+  says how many before you commit to it, and it refuses to merge two
+  populated knowledge bases rather than silently overwriting same-named
+  files. Pointing several projects at one folder is how they end up sharing
+  a base.
+
+### Changed
+
+- **The global knowledge base moved out of the meta project's own folder.**
+  `<meta>/.firepit/knowledge/` was doing two jobs: the base every project
+  reads, and the administration project's own local notes. Anything saved
+  globally was also `.firepit`'s project knowledge, and the other way round.
+
+  The rule that broke is worth stating plainly, because everything else
+  follows from it: `<repo>/.firepit/` holds what belongs to *that repo*.
+  What the meta project holds about *other* projects cannot live there. So
+  the global base is now `<meta>/knowledge/` — the knowledge of the whole
+  tree rather than of one repo in it — and hosted stores for other projects
+  are `<meta>/projects/<name>/knowledge/`. The meta project keeps
+  `.firepit/knowledge/` for its own notes, exactly like every other project.
+
+  Nothing moves on its own. While `<meta>/knowledge/` does not exist,
+  Firepit keeps reading the old directory as the global base and does not
+  give the meta project a separate local scope — starting an empty global
+  base would quietly demote every existing doc to one project's notes.
+
 ## [0.17.0] — 2026-08-17
 
 ### Changed

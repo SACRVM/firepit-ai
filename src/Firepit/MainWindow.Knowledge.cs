@@ -86,6 +86,27 @@ public partial class MainWindow
             var byDocsDir = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            // The base every project reads. It lives at the root of the meta
+            // repo, not in its .firepit/ — what the administration holds about
+            // all projects is not one project's own data.
+            var legacyGlobal = KnowledgeLayout.UsesLegacyGlobal(metaPath);
+            registrations.Add(new KnowledgeScopeRegistration(
+                KnowledgeService.GlobalScopeName,
+                metaPath,
+                KnowledgeStoreLocation.For(
+                    metaPath, KnowledgeLayout.ResolveGlobalDocsDir(metaPath))));
+            taken.Add(KnowledgeService.GlobalScopeName);
+            byDocsDir[KnowledgeLayout.ResolveGlobalDocsDir(metaPath)] =
+                KnowledgeService.GlobalScopeName;
+
+            if (legacyGlobal)
+            {
+                Log.Information(
+                    "Global knowledge is still at the pre-split path {Dir}. Move it to {Target} " +
+                    "to give the meta project its own local knowledge.",
+                    KnowledgeLayout.LocalDocsDir(metaPath), KnowledgeLayout.GlobalDocsDir(metaPath));
+            }
+
             foreach (var project in _allProjects)
             {
                 var isMeta = string.Equals(
@@ -93,9 +114,18 @@ public partial class MainWindow
                 if (isMeta)
                 {
                     _metaProjectName = project.Name;
+
+                    // While the old layout is in place its .firepit/knowledge
+                    // IS the global base, so registering it again as a local
+                    // scope would index the same files twice under two names.
+                    if (legacyGlobal)
+                    {
+                        aliases[project.Name] = KnowledgeService.GlobalScopeName;
+                        continue;
+                    }
                 }
 
-                var projectScope = isMeta ? KnowledgeService.GlobalScopeName : project.Name;
+                var projectScope = project.Name;
                 if (aliases.ContainsKey(projectScope))
                 {
                     continue;
@@ -186,6 +216,29 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// Per-project settings. Lives here because the only thing it configures
+    /// so far is the knowledge location, and applying it means re-registering
+    /// scopes.
+    /// </summary>
+    private void OpenProjectSettings(Views.SessionTab session)
+    {
+        var metaPath = Path.GetFullPath(Path.Combine(_settings.ProjectsRoot, ".firepit"));
+        var dialog = new Views.ProjectSettingsDialog(
+            session.Context.Name, session.Context.Path, metaPath)
+        {
+            Owner = this,
+        };
+        Views.DialogSizing.Apply(dialog, Views.ProjectSettingsDialog.DesignWidth);
+
+        if (dialog.ShowDialog() == true && dialog.KnowledgeChanged)
+        {
+            SyncKnowledgeScopes();
+            Log.Information(
+                "Knowledge location changed for {Project}", session.Context.Name);
+        }
+    }
+
     private void DisposeKnowledgeService()
     {
         try { _knowledgeService?.Dispose(); } catch { /* ignored */ }
@@ -199,21 +252,9 @@ public partial class MainWindow
     /// session inside the meta project calls its scope "global", and a project
     /// sharing a base addresses it by its own name.
     /// </summary>
-    private string MapToScopeName(string projectOrScopeName)
-    {
-        var name = MapToProjectScope(projectOrScopeName);
-        return _knowledgeScopeAliases.TryGetValue(name, out var scope) ? scope : name;
-    }
-
-    /// <summary>
-    /// The meta-project rename only. Broken and redirected state is keyed per
-    /// project, before any shared-base aliasing, because those answers are
-    /// about the caller's project rather than the base it ended up on.
-    /// </summary>
-    private string MapToProjectScope(string projectOrScopeName) =>
-        _metaProjectName is not null &&
-        string.Equals(projectOrScopeName, _metaProjectName, StringComparison.OrdinalIgnoreCase)
-            ? KnowledgeService.GlobalScopeName
+    private string MapToScopeName(string projectOrScopeName) =>
+        _knowledgeScopeAliases.TryGetValue(projectOrScopeName, out var scope)
+            ? scope
             : projectOrScopeName;
 
     /// <summary>
@@ -223,7 +264,7 @@ public partial class MainWindow
     /// </summary>
     private string SaveHint(string scopeName, string wrote)
     {
-        var scope = MapToProjectScope(scopeName);
+        var scope = scopeName;
         return _redirectedKnowledgeScopes.TryGetValue(scope, out var dir)
             ? $"{wrote} Stored at {dir}, outside this repo — commit it there."
             : $"{wrote} Remember to commit the file.";
@@ -232,7 +273,7 @@ public partial class MainWindow
     /// <summary>Why a scope is missing, when it is missing on purpose.</summary>
     private string? BrokenScopeReason(string? scopeName) =>
         scopeName is not null &&
-        _brokenKnowledgeScopes.TryGetValue(MapToProjectScope(scopeName), out var reason)
+        _brokenKnowledgeScopes.TryGetValue(scopeName, out var reason)
             ? $"Knowledge is disabled for '{scopeName}': {reason}"
             : null;
 

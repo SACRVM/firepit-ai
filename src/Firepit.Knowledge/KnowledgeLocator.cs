@@ -42,7 +42,7 @@ public static class KnowledgeLocator
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
 
         var firepitDir = Path.Combine(Path.GetFullPath(projectPath), ".firepit");
-        var knowledge = Path.Combine(firepitDir, FileName);
+        var knowledge = Path.Combine(firepitDir, KnowledgeLayout.DirName);
 
         // A directory, or nothing yet: the docs belong to the project. The
         // "nothing yet" case resolves to the same path so a first write lands

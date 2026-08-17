@@ -42,6 +42,9 @@ public partial class TabToolbar : UserControl
     public event EventHandler<bool>? ShellRequested;
     public event EventHandler? EditorRequested;
     public event EventHandler? ConfigureRequested;
+
+    /// <summary>Open the per-project settings dialog.</summary>
+    public event EventHandler? ProjectSettingsRequested;
     /// <summary>Raised when the user clicks the always-visible Inbox toolbar
     /// button. SessionTab owns the modal-confirm + PTY-paste flow; the toolbar
     /// only signals intent.</summary>
@@ -425,7 +428,17 @@ public partial class TabToolbar : UserControl
     private void OnResumeClick(object sender, RoutedEventArgs e)    => ResumeRequested?.Invoke(this, EventArgs.Empty);
     private void OnExplorerClick(object sender, RoutedEventArgs e)  => ExplorerRequested?.Invoke(this, EventArgs.Empty);
     private void OnEditorClick(object sender, RoutedEventArgs e)    => EditorRequested?.Invoke(this, EventArgs.Empty);
-    private void OnConfigureClick(object sender, RoutedEventArgs e) => ConfigureRequested?.Invoke(this, EventArgs.Empty);
+    // Left-click opens the settings dialog; the right-click menu keeps the
+    // direct route to config.json for everything the dialog does not cover.
+    // Same split as the Shell button next to it.
+    private void OnConfigureClick(object sender, RoutedEventArgs e) =>
+        ProjectSettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnProjectSettingsMenuClick(object sender, RoutedEventArgs e) =>
+        ProjectSettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnConfigJsonMenuClick(object sender, RoutedEventArgs e) =>
+        ConfigureRequested?.Invoke(this, EventArgs.Empty);
 
     // Left-click opens a normal shell; Shift+Click opens it elevated — the
     // modifier state is read at click time so it's reliable even though the

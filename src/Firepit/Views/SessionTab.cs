@@ -137,6 +137,10 @@ public sealed class SessionTab : IAsyncDisposable
         _toolbar.ShellRequested += (_, elevated) => OpenExternalShell(elevated);
         _toolbar.EditorRequested += (_, _) => OpenEditor();
         _toolbar.ConfigureRequested += (_, _) => OpenProjectConfig();
+        // Owned by the shell: the dialog needs the meta project's path and has
+        // to trigger a knowledge rescan, neither of which is a tab's business.
+        _toolbar.ProjectSettingsRequested += (_, _) =>
+            ProjectSettingsRequested?.Invoke(this, EventArgs.Empty);
         _toolbar.InboxRequested += (_, _) => OnInboxButtonClicked();
         _toolbar.QuickLinkClicked += (_, link) => OpenQuickLink(link);
         _toolbar.CommandClicked += (_, cmd) => RunCommand(cmd);
@@ -245,6 +249,9 @@ public sealed class SessionTab : IAsyncDisposable
     }
 
     public ProjectContext Context { get; }
+
+    /// <summary>The user asked for this project's settings dialog.</summary>
+    public event EventHandler? ProjectSettingsRequested;
 
     public UIElement Content => _content;
 

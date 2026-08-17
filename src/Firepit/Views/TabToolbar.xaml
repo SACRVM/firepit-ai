@@ -156,9 +156,15 @@
                 </StackPanel>
             </Button>
             <Button DockPanel.Dock="Left"
-                    ToolTip="Open this project's .firepit/config.json (creates a commented template if missing)"
+                    ToolTip="Project settings — right-click to edit .firepit/config.json directly"
                     Style="{StaticResource ToolbarIconButton}"
                     Click="OnConfigureClick">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Project settings" Click="OnProjectSettingsMenuClick" />
+                        <MenuItem Header="Open config.json" Click="OnConfigJsonMenuClick" />
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <StackPanel Orientation="Horizontal">
                     <Path Data="{StaticResource IconGear}"
                           Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"

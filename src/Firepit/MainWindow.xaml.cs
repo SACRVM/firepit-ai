@@ -777,6 +777,7 @@ public partial class MainWindow : Window
             initialConfig: initialConfig,
             trustLedger: _commandsTrust,
             editorCommand: _settings.Shells?.Editor ?? "code");
+        session.ProjectSettingsRequested += (_, _) => OpenProjectSettings(session);
         var tabItem = new TabItem
         {
             Header = session.Header,
