@@ -9,7 +9,6 @@
   "id": "firepit-ai",
 
   "quickLinks": [
-    { "name": "GitHub", "url": "https://github.com/SACRVM/firepit-ai" }
   ],
 
   // Toolbar URL buttons. {projectName} and {projectPath} are substituted.
@@ -46,5 +45,7 @@
     { "name": "Run",   "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "./run.ps1"], "window": "new" },
     { "name": "Build", "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "dotnet build Firepit.slnx -c Release"], "window": "new" },
     { "name": "Tests", "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "dotnet test Firepit.slnx"], "window": "new" }
+  ,
+    { "name": "GitHub", "type": "url", "url": "https://github.com/SACRVM/firepit-ai", "icon": "🐙" }
   ]
 }
