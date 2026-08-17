@@ -66,7 +66,14 @@ public static class ProjectScaffolding
     /// seed the inbox convention. Idempotent: safe to call on every config
     /// open; the hardening is gated on the fresh-scaffold transition.
     /// </summary>
-    public static ProjectScaffoldResult EnsureProjectScaffold(string projectPath, string projectId)
+    /// <param name="metaProjectPath">
+    /// The central repo, so the shared-fragment imports can be written with a
+    /// path that resolves from here. Null omits that section — a caller who
+    /// does not know where the central repo is cannot write a correct import,
+    /// and a wrong one is worse than a missing one.
+    /// </param>
+    public static ProjectScaffoldResult EnsureProjectScaffold(
+        string projectPath, string projectId, string? metaProjectPath = null)
     {
         ArgumentNullException.ThrowIfNull(projectPath);
         ArgumentNullException.ThrowIfNull(projectId);
@@ -98,6 +105,17 @@ public static class ProjectScaffolding
             projectPath,
             Blueprints.FirepitBlueprintDefaults.ArtifactsSectionMarker,
             Blueprints.FirepitBlueprintDefaults.ArtifactsSection);
+        if (metaProjectPath is not null)
+        {
+            Blueprints.FirepitFragments.EnsureSeeded(metaProjectPath);
+            claudeSeeded |= EnsureClaudeMdSection(
+                projectPath,
+                Blueprints.FirepitBlueprintDefaults.FragmentsSectionMarker,
+                Blueprints.FirepitFragments.ResolveSection(
+                    Blueprints.FirepitBlueprintDefaults.FragmentsSection,
+                    projectPath,
+                    metaProjectPath));
+        }
         EnsureKnowledgeReadme(projectPath);
         EnsurePinnedDigestSeed(projectPath);
         var blanket          = DetectBlanketIgnores(projectPath);

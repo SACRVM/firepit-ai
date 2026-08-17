@@ -23,7 +23,7 @@ public sealed class BlueprintStore
     /// meta projects pick it up once via <see cref="EnsureDefaults"/>.
     /// v2 (0.13.0) added the artifacts section.
     /// </summary>
-    public const int CurrentManifestVersion = 2;
+    public const int CurrentManifestVersion = 3;
 
     private readonly string _blueprintsDir;
 
@@ -130,6 +130,8 @@ public sealed class BlueprintStore
 
     private static IReadOnlyList<BlueprintManifestSection> BuiltInClaudeMdSections =>
     [
+        // First, because it is the one an agent should read before the rest.
+        new(FirepitBlueprintDefaults.FragmentsSectionMarker, FirepitBlueprintDefaults.FragmentsSection),
         new(FirepitBlueprintDefaults.InboxSectionMarker,     FirepitBlueprintDefaults.InboxSection),
         new(FirepitBlueprintDefaults.KnowledgeSectionMarker, FirepitBlueprintDefaults.KnowledgeSection),
         new(FirepitBlueprintDefaults.PinnedSectionMarker,    FirepitBlueprintDefaults.PinnedSection),

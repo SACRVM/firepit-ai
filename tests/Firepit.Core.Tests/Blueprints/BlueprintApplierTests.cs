@@ -64,7 +64,7 @@ public sealed class BlueprintApplierTests : IDisposable
         Assert.Contains(".firepit/knowledge/README.md", check.MissingFiles);
         Assert.Contains(".firepit/knowledge-pinned.md", check.MissingFiles);
         Assert.NotEmpty(check.MissingGitignoreLines);
-        Assert.Equal(4, check.MissingClaudeMdSections.Count);
+        Assert.Equal(5, check.MissingClaudeMdSections.Count);
         Assert.NotEmpty(check.DescribePending());
     }
 
@@ -123,8 +123,11 @@ public sealed class BlueprintApplierTests : IDisposable
     {
         // The invariant that ties ProjectScaffolding and the default
         // blueprint together: a project Firepit scaffolds today needs no
-        // modernisation tomorrow.
-        ProjectScaffolding.EnsureProjectScaffold(_project, "some-project");
+        // modernisation tomorrow. The meta path is part of scaffolding now —
+        // the shared-fragment imports cannot be written without knowing where
+        // the central repo is, and Firepit always does.
+        ProjectScaffolding.EnsureProjectScaffold(
+            _project, "some-project", metaProjectPath: Path.Combine(_root, ".firepit"));
 
         var check = BlueprintApplier.Check(_blueprint, _project);
 

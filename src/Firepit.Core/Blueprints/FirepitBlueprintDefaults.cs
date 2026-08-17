@@ -15,6 +15,24 @@ public static class FirepitBlueprintDefaults
         "Standard Firepit project layout: shared-config git hygiene, " +
         "inbox convention, knowledge base, artifact pane.";
 
+    /// <summary>Idempotency marker for the shared-fragment imports.</summary>
+    public const string FragmentsSectionMarker = FirepitFragments.SectionMarker;
+
+    // Imports rather than copied text: one file to edit when the policy
+    // changes, instead of thirty-three that quietly fall out of step. The
+    // tokens are replaced per project on apply — the path is relative or
+    // absolute depending on where the project sits, and which class fragment
+    // it gets depends on whether the repo is public.
+    public const string FragmentsSection =
+        "## Firepit conventions\n\n" +
+        "<!-- " + FirepitFragments.SectionMarker + " -->\n\n" +
+        "@" + FirepitFragments.SharedToken + "\n" +
+        "@" + FirepitFragments.ClassToken + "\n\n" +
+        "The two imports above are shared files in the Firepit central repo — " +
+        "edit them there and every project follows. They carry policy; the " +
+        "tools themselves are described by Firepit's MCP server at the " +
+        "handshake, so nothing is duplicated between the two.\n";
+
     /// <summary>Idempotency marker for the CLAUDE.md inbox section.</summary>
     public const string InboxSectionMarker = "firepit_inbox_complete";
 

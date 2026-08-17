@@ -5,6 +5,45 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-08-17
+
+### Added
+
+- **Shared CLAUDE.md fragments, imported instead of copied.** Three files in
+  the central repo under `projects/` — `claude.md` for every managed
+  project, plus `claude-github-public.md` and `claude-github-private.md` for
+  the two repo classes. The blueprint writes the `@` imports into a
+  project's CLAUDE.md; the text itself stays in one place, so changing a
+  convention is one edit rather than thirty-three that fall out of step.
+
+  They sit under `projects/` rather than at the repo root because
+  `<meta>/CLAUDE.md` already exists and addresses an agent working *inside*
+  the central repo. One file cannot be both "instructions for this repo" and
+  "instructions for all repos" — the same conflation the knowledge layout
+  had one level down.
+
+  Public and private genuinely differ: in a public repo research belongs in
+  the knowledge base rather than in committed files, and the history is
+  permanent. Which fragment a project imports is decided once, at apply
+  time, by asking `gh` for the repository's visibility. Anything unknown —
+  no git, no GitHub remote, no `gh`, a call that fails — counts as public.
+  Treating a private repo as public costs one unnecessary rule; the reverse
+  invites research into a repository anyone can read.
+
+  The import path is relative where that resolves and absolute where it
+  cannot, so a project on a network share works as well as one next to the
+  central repo.
+
+  The fragments are seeded once and never overwritten. They exist to be
+  edited, and an edit that gets reset on the next launch would be worse than
+  no fragment at all.
+
+  They carry policy, not tool documentation. Behaviour arrives with the MCP
+  handshake, which ships in the executable and changes with a release; a
+  fragment changes with a text editor. Keeping the two apart is what stops
+  them becoming two copies of the same conventions — a test asserts the
+  fragments do not name the tools.
+
 ## [0.18.0] — 2026-08-17
 
 ### Added

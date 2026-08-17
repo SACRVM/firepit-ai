@@ -82,8 +82,19 @@ public static class BlueprintApplier
             BlanketIgnores: ProjectScaffolding.DetectBlanketIgnores(projectPath));
     }
 
+    /// <param name="metaProjectPath">
+    /// The central repo. When given, the shared CLAUDE.md fragments are seeded
+    /// there if missing and the section's import tokens are resolved for this
+    /// project — path relative or absolute as it needs to be, and the policy
+    /// fragment matching the repo's visibility. Null skips the substitution,
+    /// which leaves the tokens visible rather than writing a wrong path.
+    /// </param>
     public static BlueprintApplyOutcome Apply(
-        Blueprint blueprint, string projectPath, string projectId, bool fixBlanketIgnores = false)
+        Blueprint blueprint,
+        string projectPath,
+        string projectId,
+        bool fixBlanketIgnores = false,
+        string? metaProjectPath = null)
     {
         ArgumentNullException.ThrowIfNull(blueprint);
         ArgumentException.ThrowIfNullOrEmpty(projectPath);
@@ -114,10 +125,27 @@ public static class BlueprintApplier
             actions.AddRange(check.MissingGitignoreLines.Select(l => $"added .gitignore line: {l}"));
         }
 
+        var resolveTokens = metaProjectPath is not null &&
+            check.MissingClaudeMdSections.Any(m =>
+                blueprint.ClaudeMdSections
+                    .First(s => s.Marker == m).Content
+                    .Contains(FirepitFragments.SharedToken, StringComparison.Ordinal));
+
+        if (resolveTokens)
+        {
+            foreach (var seeded in FirepitFragments.EnsureSeeded(metaProjectPath!))
+            {
+                actions.Add($"seeded shared fragment {seeded}");
+            }
+        }
+
         foreach (var marker in check.MissingClaudeMdSections)
         {
             var section = blueprint.ClaudeMdSections.First(s => s.Marker == marker);
-            ProjectScaffolding.EnsureClaudeMdSection(projectPath, section.Marker, section.Content);
+            var content = metaProjectPath is null
+                ? section.Content
+                : FirepitFragments.ResolveSection(section.Content, projectPath, metaProjectPath);
+            ProjectScaffolding.EnsureClaudeMdSection(projectPath, section.Marker, content);
             actions.Add($"appended CLAUDE.md section ({marker})");
         }
 

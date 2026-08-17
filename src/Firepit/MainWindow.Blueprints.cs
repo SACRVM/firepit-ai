@@ -133,7 +133,11 @@ public partial class MainWindow
                 }
 
                 var outcome = BlueprintApplier.Apply(
-                    blueprint, project.Path, project.Name, fixBlanketIgnores);
+                    blueprint, project.Path, project.Name, fixBlanketIgnores,
+                    // From the store, not the window: this runs off the
+                    // dispatcher, and the store was built from the snapshotted
+                    // root a few lines up.
+                    metaProjectPath: store.MetaProjectPath);
                 Log.Information(
                     "Blueprint '{Blueprint}' applied to {Project}: {Count} action(s)",
                     blueprintName, project.Name, outcome.Actions.Count);

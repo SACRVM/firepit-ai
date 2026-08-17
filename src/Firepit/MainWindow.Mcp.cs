@@ -96,13 +96,19 @@ public partial class MainWindow : IMcpBackend
                     if (blueprint is not null)
                     {
                         var outcome = Firepit.Core.Blueprints.BlueprintApplier.Apply(
-                            blueprint, resolved, byPath?.Name ?? name);
+                            blueprint, resolved, byPath?.Name ?? name,
+                            metaProjectPath: store.MetaProjectPath);
                         actions = outcome.Actions;
                         warnings.AddRange(outcome.Warnings);
                     }
                     else
                     {
-                        var scaffold = ProjectScaffolding.EnsureProjectScaffold(resolved, byPath?.Name ?? name);
+                        // Only when the central repo is actually set up —
+                        // seeding fragments would otherwise create it as a side
+                        // effect of scaffolding an unrelated project.
+                        var scaffold = ProjectScaffolding.EnsureProjectScaffold(
+                            resolved, byPath?.Name ?? name,
+                            store.MetaProjectExists ? store.MetaProjectPath : null);
                         warnings.AddRange(scaffold.BlanketIgnores
                             .Select(l => $"blanket ignore '{l}' hides shared config"));
                     }
@@ -442,7 +448,9 @@ public partial class MainWindow : IMcpBackend
             // Existing config — or scaffold one. EnsureProjectScaffold no-ops
             // if the file already exists; on first scaffold it also drops the
             // commented tour AND sets up git hygiene + the inbox convention.
-            var scaffold = ProjectScaffolding.EnsureProjectScaffold(project.Path, project.Name);
+            var scaffold = ProjectScaffolding.EnsureProjectScaffold(
+                project.Path, project.Name,
+                Directory.Exists(MetaProjectPath) ? MetaProjectPath : null);
             if (scaffold.ScaffoldCreated)
             {
                 Log.Information(

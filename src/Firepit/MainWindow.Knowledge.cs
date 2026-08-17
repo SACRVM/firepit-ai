@@ -24,6 +24,10 @@ public partial class MainWindow
     // calls originating *inside* the meta project resolve to "global" too.
     private string? _metaProjectName;
 
+    /// <summary>The central repo. Shared by knowledge, blueprints and scaffolding.</summary>
+    internal string MetaProjectPath =>
+        Path.GetFullPath(Path.Combine(_settings.ProjectsRoot, ".firepit"));
+
     // Scopes that asked for a store we could not resolve, with the reason.
     // Kept so the knowledge tools can answer "why is my scope gone" instead of
     // the caller guessing from a bare not-found.

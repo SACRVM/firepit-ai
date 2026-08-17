@@ -59,7 +59,7 @@ public sealed class BlueprintStoreTests : IDisposable
         Assert.Equal("firepit", blueprint.Name);
         Assert.True(blueprint.EnsureProjectConfig);
         Assert.Equal(ProjectScaffolding.GitignoreEntries, blueprint.GitignoreLines);
-        Assert.Equal(4, blueprint.ClaudeMdSections.Count);
+        Assert.Equal(5, blueprint.ClaudeMdSections.Count);
         Assert.Equal(2, blueprint.Files.Count);
         var relPaths = blueprint.Files.Select(f => f.RelativePath).ToArray();
         Assert.Contains(".firepit/knowledge/README.md", relPaths);

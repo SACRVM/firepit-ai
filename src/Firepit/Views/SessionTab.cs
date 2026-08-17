@@ -929,7 +929,11 @@ public sealed class SessionTab : IAsyncDisposable
         try
         {
             var projectId = _currentConfig?.Id ?? Context.Name;
-            var scaffold = Firepit.Core.ProjectConfig.ProjectScaffolding.EnsureProjectScaffold(Context.Path, projectId);
+            // No meta path here on purpose: a tab does not know where the
+            // central repo is, and the shared-fragment imports arrive with
+            // firepit_blueprint_apply, which does.
+            var scaffold = Firepit.Core.ProjectConfig.ProjectScaffolding.EnsureProjectScaffold(
+                Context.Path, projectId);
             if (scaffold.ScaffoldCreated)
             {
                 Log.Information(
