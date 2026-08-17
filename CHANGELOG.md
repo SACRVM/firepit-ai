@@ -5,6 +5,49 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-08-17
+
+### Added
+
+- **`firepit_integrity_check` — the pass that does not trust the machinery.**
+  Everything else keeping the knowledge index current is event-driven: a
+  watcher, a debounce, a sweep on drift. That is how it keeps up, and it is
+  also why this is needed — each of those can stop delivering without
+  anything looking wrong, and a search answering from a stale index is
+  indistinguishable from one answering correctly.
+
+  It compares, per project:
+
+  - every markdown document on disk against the index manifest, by content
+    hash — so a document that exists but cannot be found, or one whose text
+    changed since it was indexed, is named rather than inferred;
+  - whether the index opens at all;
+  - whether the file watcher is attached;
+  - blueprint conformance, and blanket gitignores that hide shared config;
+  - whether the CLAUDE.md fragment imports resolve, and whether the class
+    fragment still matches the repository's **current** visibility.
+
+  Findings are graded. `error` means an agent is being actively misled;
+  `warning` is drift. Omit the project name to sweep everything.
+
+- **A repo that changed visibility is now caught.** Blueprint conformance is
+  a marker check — the section is there or it is not — which is right for
+  text that never changes and wrong for the class fragment, because a
+  repository's visibility is not a constant. A repo flipped from private to
+  public kept importing the private policy, telling its agent that research
+  may be committed, into a repository anyone can now read. That is reported
+  as an error with the exact import to change.
+
+- **`repair=true` fixes what is derived.** Reindex, rebuild an index that
+  will not open, regenerate the pinned digest, re-attach a lost watcher. All
+  of it is rebuildable from the markdown, which is what makes doing it
+  automatically defensible.
+
+  It never edits a document or a CLAUDE.md. Those are authored content, and
+  a maintenance command that silently rewrites them would be a worse problem
+  than the one it fixes — so anything needing that comes back as a finding
+  with the fix spelled out, for a human or an agent to carry out.
+
 ## [0.21.0] — 2026-08-17
 
 ### Changed

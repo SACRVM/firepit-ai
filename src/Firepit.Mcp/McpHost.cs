@@ -563,6 +563,14 @@ public sealed class McpHost : IDisposable
                     string.IsNullOrEmpty(project) ? null : project, blueprint);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.BlueprintCheckResult)));
             }
+            case "firepit_integrity_check":
+            {
+                var project = args["projectName"]?.GetValue<string>();
+                var repair  = args["repair"]?.GetValue<bool>() ?? false;
+                var result = await _backend.CheckIntegrityAsync(
+                    string.IsNullOrEmpty(project) ? null : project, repair);
+                return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.IntegrityCheckResult)));
+            }
             case "firepit_blueprint_apply":
             {
                 var project   = args["projectName"]?.GetValue<string>();

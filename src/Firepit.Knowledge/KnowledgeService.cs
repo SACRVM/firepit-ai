@@ -390,6 +390,207 @@ public sealed class KnowledgeService : IDisposable
         return new KnowledgeSearchResult(hits, degraded, warnings.Count > 0 ? warnings : null);
     }
 
+    /// <summary>
+    /// Compares each scope's index against the documents on disk, and
+    /// optionally repairs what is derived.
+    /// </summary>
+    /// <remarks>
+    /// The watchers, the retry and the sweep all aim to keep this from ever
+    /// finding anything. They are event-driven, though, and every event source
+    /// can fail quietly — so this is the pass that answers "is it actually
+    /// correct" by looking, rather than by trusting the machinery that was
+    /// supposed to keep it correct.
+    ///
+    /// Repair only ever touches the index, which is derived from the markdown
+    /// and can always be rebuilt from it. Nothing here edits a document.
+    /// </remarks>
+    public async Task<IReadOnlyList<ScopeIntegrity>> CheckIntegrityAsync(
+        IReadOnlyCollection<string>? scopeNames = null,
+        bool repair = false,
+        CancellationToken ct = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        List<Scope> targets;
+        lock (_scopesGate)
+        {
+            targets = scopeNames is null || scopeNames.Count == 0
+                ? [.. _scopes.Values]
+                : [.. scopeNames.Select(n => _scopes.GetValueOrDefault(n)).OfType<Scope>()];
+        }
+
+        var results = new List<ScopeIntegrity>();
+        foreach (var scope in targets)
+        {
+            results.Add(await CheckScopeAsync(scope, repair, ct));
+        }
+
+        return results;
+    }
+
+    private async Task<ScopeIntegrity> CheckScopeAsync(Scope scope, bool repair, CancellationToken ct)
+    {
+        var repairs = new List<string>();
+        var docsDir = scope.Store.KnowledgeDir;
+
+        var onDisk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(docsDir))
+        {
+            foreach (var file in Directory.EnumerateFiles(docsDir, "*.md", SearchOption.AllDirectories))
+            {
+                var rel = Path.GetRelativePath(docsDir, file).Replace('\\', '/');
+                try
+                {
+                    onDisk[rel] = Convert.ToHexStringLower(
+                        System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(file, ct)));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // Unreadable right now. Recorded with a hash nothing can
+                    // match, so it shows up as needing attention rather than
+                    // passing as indexed.
+                    onDisk[rel] = "<unreadable>";
+                }
+            }
+        }
+
+        Dictionary<string, (string Hash, bool Embedded)> indexed;
+        try
+        {
+            indexed = ReadIndexManifest(scope);
+        }
+        catch (Exception ex)
+        {
+            // A corrupt index is total loss for the scope, and it is derived
+            // data — so the repair is to throw it away and rebuild from the
+            // markdown, which is the truth.
+            if (repair)
+            {
+                repairs.Add(await RebuildIndexAsync(scope, ct));
+                try
+                {
+                    indexed = ReadIndexManifest(scope);
+                }
+                catch (Exception second)
+                {
+                    return new ScopeIntegrity(
+                        scope.Name, docsDir, scope.Health, onDisk.Count, 0, [.. onDisk.Keys], [], [],
+                        second.Message, repairs);
+                }
+            }
+            else
+            {
+                return new ScopeIntegrity(
+                    scope.Name, docsDir, scope.Health, onDisk.Count, 0, [.. onDisk.Keys], [], [],
+                    ex.Message, repairs);
+            }
+        }
+
+        var missing = onDisk.Keys.Where(k => !indexed.ContainsKey(k)).Order().ToList();
+        var stale = indexed.Keys.Where(k => !onDisk.ContainsKey(k)).Order().ToList();
+        var outOfDate = onDisk
+            .Where(kv => indexed.TryGetValue(kv.Key, out var row) && row.Hash != kv.Value)
+            .Select(kv => kv.Key)
+            .Order()
+            .ToList();
+
+        if (repair && (missing.Count > 0 || stale.Count > 0 || outOfDate.Count > 0 ||
+                       scope.Health is not ScopeHealth.Ready))
+        {
+            await ReindexAfterWriteAsync(scope, ct);
+            repairs.Add("reindexed");
+            indexed = TryReadIndexManifest(scope);
+            missing = onDisk.Keys.Where(k => !indexed.ContainsKey(k)).Order().ToList();
+            stale = indexed.Keys.Where(k => !onDisk.ContainsKey(k)).Order().ToList();
+            outOfDate = onDisk
+                .Where(kv => indexed.TryGetValue(kv.Key, out var row) && row.Hash != kv.Value)
+                .Select(kv => kv.Key)
+                .Order()
+                .ToList();
+        }
+
+        // A watcher that is not attached means this scope is running blind
+        // until the next sweep. Cheap to fix here while we are looking anyway.
+        lock (_scopesGate)
+        {
+            if (scope.Watcher is null)
+            {
+                TryAttachWatcher(scope);
+                if (scope.Watcher is not null)
+                {
+                    repairs.Add("re-attached the file watcher");
+                }
+            }
+        }
+
+        if (repair && PinnedDigest.Regenerate(docsDir, scope.DigestPath))
+        {
+            repairs.Add("regenerated knowledge-pinned.md");
+        }
+
+        return new ScopeIntegrity(
+            scope.Name, docsDir, scope.Health, onDisk.Count, indexed.Count,
+            missing, stale, outOfDate, null, repairs);
+    }
+
+    private static Dictionary<string, (string Hash, bool Embedded)> ReadIndexManifest(Scope scope)
+    {
+        var result = new Dictionary<string, (string, bool)>(StringComparer.OrdinalIgnoreCase);
+        if (!scope.Store.IndexExists)
+        {
+            return result;
+        }
+
+        using var conn = scope.Store.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT path, content_hash, embedded FROM documents";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            result[reader.GetString(0)] = (reader.GetString(1), reader.GetInt64(2) != 0);
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, (string Hash, bool Embedded)> TryReadIndexManifest(Scope scope)
+    {
+        try
+        {
+            return ReadIndexManifest(scope);
+        }
+        catch (Exception)
+        {
+            return new Dictionary<string, (string, bool)>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private async Task<string> RebuildIndexAsync(Scope scope, CancellationToken ct)
+    {
+        await scope.IndexGate.WaitAsync(ct);
+        try
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                var path = scope.Store.DbPath + suffix;
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+        }
+        finally
+        {
+            scope.IndexGate.Release();
+        }
+
+        scope.Health = ScopeHealth.NeverIndexed;
+        scope.IndexedFingerprint = default;
+        await ReindexAfterWriteAsync(scope, ct);
+        return "deleted the unreadable index and rebuilt it from the documents";
+    }
+
     /// <summary>Reads one knowledge document. Null when it doesn't exist.</summary>
     public async Task<KnowledgeDocument?> GetDocumentAsync(
         string scopeName, string path, CancellationToken ct = default)

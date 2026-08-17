@@ -175,6 +175,32 @@ public sealed record BlueprintCheckResult(
     string? Blueprint,
     IReadOnlyList<BlueprintProjectCheck> Projects);
 
+/// <summary>
+/// One project's integrity findings. Split by what a caller can safely do
+/// about them: <see cref="Repairs"/> already happened and only touched derived
+/// data, <see cref="Findings"/> need a decision.
+/// </summary>
+public sealed record ProjectIntegrity(
+    string Project,
+    bool Sound,
+    IReadOnlyList<IntegrityFinding> Findings,
+    IReadOnlyList<string> Repairs);
+
+/// <param name="Severity">
+/// "error" means an agent is being actively misled — about what it may commit,
+/// or about knowledge that exists but cannot be found. "warning" is drift.
+/// </param>
+public sealed record IntegrityFinding(
+    string Severity,
+    string Area,
+    string Message,
+    string? Fix = null);
+
+public sealed record IntegrityCheckResult(
+    bool Ok,
+    string? Message,
+    IReadOnlyList<ProjectIntegrity> Projects);
+
 public sealed record BlueprintApplyResult(
     bool Ok,
     string? Message,

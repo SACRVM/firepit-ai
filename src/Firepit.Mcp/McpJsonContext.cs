@@ -31,6 +31,7 @@ namespace Firepit.Mcp;
 [JsonSerializable(typeof(BlueprintProjectCheck))]
 [JsonSerializable(typeof(IReadOnlyList<BlueprintProjectCheck>))]
 [JsonSerializable(typeof(BlueprintCheckResult))]
+[JsonSerializable(typeof(IntegrityCheckResult))]
 [JsonSerializable(typeof(BlueprintApplyResult))]
 [JsonSerializable(typeof(ArtifactSummary))]
 [JsonSerializable(typeof(IReadOnlyList<ArtifactSummary>))]

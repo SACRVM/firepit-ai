@@ -103,6 +103,15 @@ public interface IMcpBackend
     /// <summary>Conformance check; null projectName sweeps all projects.</summary>
     Task<BlueprintCheckResult>        CheckBlueprintAsync(string? projectName, string blueprintName);
 
+    /// <summary>
+    /// Verifies that what Firepit maintains for a project still matches
+    /// reality — the knowledge index against the documents on disk, the
+    /// CLAUDE.md fragment imports against the repository's current visibility,
+    /// blueprint conformance. With <paramref name="repair"/>, fixes what is
+    /// derived and can be rebuilt; never edits a document or a CLAUDE.md.
+    /// </summary>
+    Task<IntegrityCheckResult>        CheckIntegrityAsync(string? projectName, bool repair);
+
     /// <summary>Idempotent apply of a blueprint to one project.</summary>
     Task<BlueprintApplyResult>        ApplyBlueprintAsync(string projectName, string blueprintName,
                                                           bool fixBlanketIgnores);

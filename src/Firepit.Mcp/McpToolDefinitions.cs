@@ -283,6 +283,28 @@ internal static class McpToolDefinitions
             { "type": "object", "properties": {}, "additionalProperties": false }
             """),
 
+        new("firepit_integrity_check",
+            "Verify that what Firepit maintains for a project still matches reality: every " +
+            "knowledge document on disk is in the search index and up to date, the index is " +
+            "readable, the CLAUDE.md fragment imports resolve and match the repository's CURRENT " +
+            "visibility, and the project is blueprint-conformant. Omit projectName to sweep " +
+            "everything. Findings marked \"error\" mean an agent is being actively misled — " +
+            "knowledge that exists but cannot be found, or a public repo importing the private " +
+            "policy. With repair=true, Firepit fixes what is derived and can be rebuilt from the " +
+            "documents (reindex, rebuild a corrupt index, regenerate the pinned digest, re-attach " +
+            "a lost file watcher); it never edits a document or a CLAUDE.md, so anything needing " +
+            "that comes back as a finding with the fix spelled out.",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "projectName": { "type": "string", "description": "Project to check; omit to check all projects." },
+                "repair":      { "type": "boolean", "description": "Repair derived data (index, digest, watcher). Never touches documents or CLAUDE.md.", "default": false }
+              },
+              "additionalProperties": false
+            }
+            """),
+
         new("firepit_blueprint_check",
             "Check project(s) for blueprint conformance without changing anything. Returns per " +
             "project the pending actions an apply would take (empty = conformant) plus warnings " +
