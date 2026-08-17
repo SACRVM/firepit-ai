@@ -58,10 +58,10 @@ public static class FirepitBlueprintDefaults
         "findings with `firepit_knowledge_add` — written in English, per the " +
         "indexing convention. The created markdown files live under " +
         "`.firepit/knowledge/` and are committed like any other file — unless " +
-        "this project's `knowledge.storage` routes them into another " +
-        "project's store, which is how a public repo keeps research out of " +
-        "its own history. The tool's reply says where the file landed; follow " +
-        "it rather than assuming.\n";
+        "`.firepit/knowledge` is a *file* rather than a directory, in which " +
+        "case it holds the path to where they really live, which is how a " +
+        "public repo keeps research out of its own history. The tool's reply " +
+        "says where the file landed; follow it rather than assuming.\n";
 
     public const string KnowledgeReadmePath = ".firepit/knowledge/README.md";
 

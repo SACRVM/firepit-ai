@@ -30,10 +30,15 @@ public partial class MainWindow
     private IReadOnlyDictionary<string, string> _brokenKnowledgeScopes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-    // Scope name → the project whose store holds its docs. Only redirected
-    // scopes appear here, and only so the tools stop telling an agent to
-    // commit a file that deliberately is not in this repo.
+    // Project scope name → the directory its docs actually live in. Only
+    // redirected scopes appear here, and only so the tools stop telling an
+    // agent to commit a file that deliberately is not in this repo.
     private IReadOnlyDictionary<string, string> _redirectedKnowledgeScopes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    // Project scope name → the scope actually registered for it. Differs when
+    // a pointer sends several projects at one shared base.
+    private IReadOnlyDictionary<string, string> _knowledgeScopeAliases =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
     private void InitializeKnowledgeService()
@@ -73,14 +78,14 @@ public partial class MainWindow
         try
         {
             var metaPath = Path.GetFullPath(Path.Combine(_settings.ProjectsRoot, ".firepit"));
-            var byName = _allProjects
-                .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First().Path, StringComparer.OrdinalIgnoreCase);
 
             var registrations = new List<KnowledgeScopeRegistration>();
             var broken = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var redirected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var byDocsDir = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var project in _allProjects)
             {
                 var isMeta = string.Equals(
@@ -90,30 +95,68 @@ public partial class MainWindow
                     _metaProjectName = project.Name;
                 }
 
-                var name = isMeta ? KnowledgeService.GlobalScopeName : project.Name;
-                if (!seen.Add(name))
+                var projectScope = isMeta ? KnowledgeService.GlobalScopeName : project.Name;
+                if (aliases.ContainsKey(projectScope))
                 {
                     continue;
                 }
 
-                var (location, error) = ResolveKnowledgeStore(project, byName, redirected, name);
-                if (error is not null)
+                var resolution = KnowledgeLocator.Resolve(project.Path);
+                if (resolution.Error is { } error)
                 {
-                    // Deliberately not registered. A scope that silently fell
-                    // back to the project's own folder would put the research
-                    // this setting exists to hide into the repo it hides it
-                    // from — better the tools report the scope as missing.
-                    broken[name] = error;
-                    Log.Error(
-                        "Knowledge scope {Scope} disabled: {Reason}", name, error);
+                    // Deliberately not registered. A scope that quietly fell
+                    // back to the project's own folder would put research into
+                    // the repo the pointer exists to keep it out of — better
+                    // the tools report the scope as broken, and say why.
+                    broken[projectScope] = error;
+                    Log.Error("Knowledge scope {Scope} disabled: {Reason}", projectScope, error);
                     continue;
                 }
 
-                registrations.Add(new KnowledgeScopeRegistration(name, project.Path, location));
+                if (resolution.IsRedirected)
+                {
+                    redirected[projectScope] = resolution.DocsDir;
+                    ExcludePinnedDigest(project, resolution.DocsDir);
+                }
+
+                // Several projects pointing at one directory are one knowledge
+                // base, not N. Registering each separately would have that many
+                // watchers and indexers fighting over the same files.
+                if (byDocsDir.TryGetValue(resolution.DocsDir, out var owner))
+                {
+                    aliases[projectScope] = owner;
+                    Log.Information(
+                        "Knowledge scope {Scope} shares the base '{Owner}'", projectScope, owner);
+                    continue;
+                }
+
+                // A shared base is named after the directory it lives in, so
+                // five appkit repos read as one "appkit" rather than as
+                // whichever member happened to be discovered first. Falls back
+                // to the project name if that would collide.
+                var scopeName = projectScope;
+                if (resolution.IsRedirected)
+                {
+                    var folder = Path.GetFileName(
+                        resolution.DocsDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (!string.IsNullOrEmpty(folder) && !taken.Contains(folder))
+                    {
+                        scopeName = folder;
+                    }
+                }
+
+                taken.Add(scopeName);
+                aliases[projectScope] = scopeName;
+                byDocsDir[resolution.DocsDir] = scopeName;
+                registrations.Add(new KnowledgeScopeRegistration(
+                    scopeName,
+                    project.Path,
+                    KnowledgeStoreLocation.For(project.Path, resolution.DocsDir)));
             }
 
             _brokenKnowledgeScopes = broken;
             _redirectedKnowledgeScopes = redirected;
+            _knowledgeScopeAliases = aliases;
             svc.SyncScopes(registrations);
         }
         catch (Exception ex)
@@ -122,68 +165,25 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// Where one project's knowledge docs belong, per its
-    /// <c>knowledge.storage</c> setting. Returns exactly one of a location or
-    /// an error — never a quiet default when the setting names a project we
-    /// cannot resolve.
-    /// </summary>
-    private (KnowledgeStoreLocation? Location, string? Error) ResolveKnowledgeStore(
-        Firepit.Core.Projects.Project project,
-        IReadOnlyDictionary<string, string> projectsByName,
-        IDictionary<string, string> redirected,
-        string scopeName)
+    // The digest stays in the project (CLAUDE.md imports it from there) but is
+    // compiled from docs that deliberately are not in this repo — so keep it
+    // out of the repo too, locally and without a committed trace.
+    private static void ExcludePinnedDigest(Firepit.Core.Projects.Project project, string docsDir)
     {
-        string? storage = null;
-        try
-        {
-            storage = _projectConfigStore.Load(project.Path)?.Knowledge?.Storage;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Could not read knowledge config for {Project}", project.Name);
-        }
-
-        if (string.IsNullOrWhiteSpace(storage) ||
-            string.Equals(storage, ProjectKnowledgeConfig.RepoStorage, StringComparison.OrdinalIgnoreCase))
-        {
-            return (null, null);
-        }
-
-        if (string.Equals(storage, project.Name, StringComparison.OrdinalIgnoreCase))
-        {
-            return (null, null);
-        }
-
-        if (!projectsByName.TryGetValue(storage, out var storePath))
-        {
-            return (null,
-                $"knowledge.storage names '{storage}', which is not a project Firepit knows. " +
-                "Use a project name from firepit_list_projects, or \"repo\".");
-        }
-
-        var location = KnowledgeStoreLocation.InStore(storePath, project.Name, project.Path);
-        redirected[scopeName] = storage;
-
-        // The digest still lands in the project (CLAUDE.md imports it from
-        // there) but it is compiled from docs that are deliberately not in
-        // this repo — so keep it out of the repo too, locally and silently.
         try
         {
             if (Firepit.Core.Projects.GitLocalExclude.Ensure(
                     project.Path, Firepit.Core.Blueprints.FirepitBlueprintDefaults.PinnedDigestPath))
             {
                 Log.Information(
-                    "Excluded the pinned digest from git for {Project} (knowledge stored in '{Store}')",
-                    project.Name, storage);
+                    "Excluded the pinned digest from git for {Project} (knowledge lives at {Dir})",
+                    project.Name, docsDir);
             }
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not update .git/info/exclude for {Project}", project.Name);
         }
-
-        return (location, null);
     }
 
     private void DisposeKnowledgeService()
@@ -194,8 +194,23 @@ public partial class MainWindow
         _knowledgeLoggerFactory = null;
     }
 
-    /// <summary>A session inside the meta project calls its scope "global".</summary>
-    private string MapToScopeName(string projectOrScopeName) =>
+    /// <summary>
+    /// Turns whatever a caller says into the scope actually registered: a
+    /// session inside the meta project calls its scope "global", and a project
+    /// sharing a base addresses it by its own name.
+    /// </summary>
+    private string MapToScopeName(string projectOrScopeName)
+    {
+        var name = MapToProjectScope(projectOrScopeName);
+        return _knowledgeScopeAliases.TryGetValue(name, out var scope) ? scope : name;
+    }
+
+    /// <summary>
+    /// The meta-project rename only. Broken and redirected state is keyed per
+    /// project, before any shared-base aliasing, because those answers are
+    /// about the caller's project rather than the base it ended up on.
+    /// </summary>
+    private string MapToProjectScope(string projectOrScopeName) =>
         _metaProjectName is not null &&
         string.Equals(projectOrScopeName, _metaProjectName, StringComparison.OrdinalIgnoreCase)
             ? KnowledgeService.GlobalScopeName
@@ -208,16 +223,16 @@ public partial class MainWindow
     /// </summary>
     private string SaveHint(string scopeName, string wrote)
     {
-        var scope = MapToScopeName(scopeName);
-        return _redirectedKnowledgeScopes.TryGetValue(scope, out var store)
-            ? $"{wrote} Stored in the '{store}' project, not this repo — commit it there."
+        var scope = MapToProjectScope(scopeName);
+        return _redirectedKnowledgeScopes.TryGetValue(scope, out var dir)
+            ? $"{wrote} Stored at {dir}, outside this repo — commit it there."
             : $"{wrote} Remember to commit the file.";
     }
 
     /// <summary>Why a scope is missing, when it is missing on purpose.</summary>
     private string? BrokenScopeReason(string? scopeName) =>
         scopeName is not null &&
-        _brokenKnowledgeScopes.TryGetValue(MapToScopeName(scopeName), out var reason)
+        _brokenKnowledgeScopes.TryGetValue(MapToProjectScope(scopeName), out var reason)
             ? $"Knowledge is disabled for '{scopeName}': {reason}"
             : null;
 

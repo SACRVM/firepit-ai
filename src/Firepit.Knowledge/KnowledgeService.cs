@@ -362,7 +362,7 @@ public sealed class KnowledgeService : IDisposable
     private Scope CreateScope(KnowledgeScopeRegistration reg)
     {
         var projectPath = Path.GetFullPath(reg.ProjectPath);
-        var location = reg.Store ?? KnowledgeStoreLocation.BesideProject(projectPath);
+        var location = reg.Store ?? KnowledgeStoreLocation.For(projectPath);
         var store = new KnowledgeStore(location.DocsDir, location.IndexPath);
         var scope = new Scope
         {

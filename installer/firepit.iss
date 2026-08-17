@@ -12,7 +12,7 @@
 ;   - bin/installer/FirepitSetup-<version>-win-x64.exe
 
 #ifndef AppVersion
-  #define AppVersion "0.16.1"
+  #define AppVersion "0.17.0"
 #endif
 
 [Setup]

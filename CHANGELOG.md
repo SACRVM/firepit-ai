@@ -5,6 +5,38 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-08-17
+
+### Changed
+
+- **`.firepit/knowledge` is either a directory or a pointer file.** A
+  directory means the docs are in it, as always. A file means its content is
+  the path to the directory that really holds them — relative to the
+  `.firepit` directory, so moving the whole repos tree keeps every pointer
+  valid. This is the pattern git uses for `.git`, which is a directory in a
+  normal clone and a file containing `gitdir:` in a worktree.
+
+  It replaces the `knowledge.storage` config key from 0.16.x, which is gone
+  and was never written into a config. The key read as "store my knowledge
+  in project X", but what it did was create a separate folder that merely
+  *lived* there — and the distance between those two readings is "my
+  research got merged into the base every project reads". A path in a file
+  has no value space, so there are no reserved words, no collisions with
+  project names, and nowhere to write something unsupported.
+
+  A pointer must land on a directory. Pointing at another pointer is
+  refused rather than followed, which is what keeps resolution at exactly
+  one step — no hop limit, no cycles to detect.
+
+  Several projects may point at one directory; that is one knowledge base,
+  not one per project, and it is named after the directory. Five public
+  repos can share one private base without any of them hosting it.
+
+  Errors are loud on purpose: an empty pointer, a path whose parent does not
+  exist, or a pointer at a pointer disables the scope and says why. Falling
+  back to the project's own folder would put research into the repo the
+  pointer exists to keep it out of.
+
 ## [0.16.1] — 2026-08-17
 
 ### Changed

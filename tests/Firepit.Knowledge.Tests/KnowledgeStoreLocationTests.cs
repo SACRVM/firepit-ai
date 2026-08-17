@@ -1,16 +1,17 @@
 namespace Firepit.Knowledge.Tests;
 
 /// <summary>
-/// A project may keep its knowledge in another project's store so a public
-/// repo never commits private research. What must survive that redirect: the
-/// docs move, the index follows them, and the pinned digest stays behind —
-/// CLAUDE.md imports it by a path relative to the project root.
+/// `.firepit/knowledge` is either a directory holding the docs or a file
+/// holding the path to one. What must survive a pointer: the docs move, the
+/// index follows them, and the pinned digest stays behind — CLAUDE.md imports
+/// it by a path relative to the project root.
 /// </summary>
 public sealed class KnowledgeStoreLocationTests : IDisposable
 {
     private readonly string _root;
     private readonly string _project;
-    private readonly string _store;
+    private readonly string _firepitDir;
+    private readonly string _shared;
     private readonly KnowledgeService _service;
 
     public KnowledgeStoreLocationTests()
@@ -18,9 +19,10 @@ public sealed class KnowledgeStoreLocationTests : IDisposable
         _root = Path.Combine(
             Path.GetTempPath(), "firepit-knowledge-store-tests", Guid.NewGuid().ToString("N"));
         _project = Path.Combine(_root, "public-repo");
-        _store = Path.Combine(_root, ".firepit");
-        Directory.CreateDirectory(Path.Combine(_project, ".firepit"));
-        Directory.CreateDirectory(_store);
+        _firepitDir = Path.Combine(_project, ".firepit");
+        _shared = Path.Combine(_root, ".firepit", "appkit");
+        Directory.CreateDirectory(_firepitDir);
+        Directory.CreateDirectory(_shared);
 
         _service = new KnowledgeService(modelDataRoot: Path.Combine(_root, "data"));
     }
@@ -38,63 +40,119 @@ public sealed class KnowledgeStoreLocationTests : IDisposable
         }
     }
 
-    [Fact]
-    public void BesideProject_IsTheLayoutThatShippedBefore()
-    {
-        var location = KnowledgeStoreLocation.BesideProject(_project);
+    private void WritePointer(string relativeTarget) =>
+        File.WriteAllText(Path.Combine(_firepitDir, "knowledge"), relativeTarget);
 
-        Assert.Equal(Path.Combine(_project, ".firepit", "knowledge"), location.DocsDir);
-        Assert.Equal(Path.Combine(_project, ".firepit", "knowledge.db"), location.IndexPath);
-        Assert.Equal(
-            Path.Combine(_project, ".firepit", "knowledge-pinned.md"), location.DigestPath);
+    private static KnowledgeScopeRegistration Registration(string name, string project, string docsDir) =>
+        new(name, project, KnowledgeStoreLocation.For(project, docsDir));
+
+    // --- resolution ------------------------------------------------------
+
+    [Fact]
+    public void NoPointer_KeepsTheLayoutThatShippedBefore()
+    {
+        var resolved = KnowledgeLocator.Resolve(_project);
+        Assert.False(resolved.IsRedirected);
+        Assert.Null(resolved.Error);
+
+        var location = KnowledgeStoreLocation.For(_project, resolved.DocsDir);
+        Assert.Equal(Path.Combine(_firepitDir, "knowledge"), location.DocsDir);
+        Assert.Equal(Path.Combine(_firepitDir, "knowledge.db"), location.IndexPath);
+        Assert.Equal(Path.Combine(_firepitDir, "knowledge-pinned.md"), location.DigestPath);
     }
 
     [Fact]
-    public void InStore_MovesDocsAndIndexButLeavesTheDigestInTheProject()
+    public void APointer_IsRelativeToTheFirepitDirectory()
     {
-        var location = KnowledgeStoreLocation.InStore(_store, "public-repo", _project);
+        WritePointer(@"..\..\.firepit\appkit");
 
-        Assert.Equal(Path.Combine(_store, "knowledge", "public-repo"), location.DocsDir);
-        // Next to the folder, not inside it — the docs folder stays pure
-        // markdown and one `knowledge/*.db` line covers every index.
-        Assert.Equal(Path.Combine(_store, "knowledge", "public-repo.db"), location.IndexPath);
-        Assert.Equal(
-            Path.Combine(_project, ".firepit", "knowledge-pinned.md"), location.DigestPath);
+        var resolved = KnowledgeLocator.Resolve(_project);
+        Assert.True(resolved.IsRedirected);
+        Assert.Null(resolved.Error);
+        Assert.Equal(_shared, resolved.DocsDir);
+
+        var location = KnowledgeStoreLocation.For(_project, resolved.DocsDir);
+        Assert.Equal(_shared + ".db", location.IndexPath);
+        // Stays behind: the CLAUDE.md import resolves against the project root.
+        Assert.Equal(Path.Combine(_firepitDir, "knowledge-pinned.md"), location.DigestPath);
     }
+
+    [Fact]
+    public void APointer_MayCommentAndQuoteTheLine()
+    {
+        WritePointer("# knowledge lives in the private meta repo\n\"../../.firepit/appkit\"\n");
+
+        Assert.Equal(_shared, KnowledgeLocator.Resolve(_project).DocsDir);
+    }
+
+    [Fact]
+    public void APointerAtAPointer_IsRefusedRatherThanFollowed()
+    {
+        // One step, always. Refusing chains is what makes hop limits and cycle
+        // detection unnecessary rather than merely unlikely to trigger.
+        var other = Path.Combine(_root, "other", ".firepit");
+        Directory.CreateDirectory(other);
+        File.WriteAllText(Path.Combine(other, "knowledge"), "../../.firepit/appkit");
+        WritePointer(@"..\..\other\.firepit\knowledge");
+
+        var resolved = KnowledgeLocator.Resolve(_project);
+        Assert.NotNull(resolved.Error);
+        Assert.Contains("another pointer", resolved.Error);
+    }
+
+    [Fact]
+    public void AnEmptyPointer_SaysSoInsteadOfIndexingNothing()
+    {
+        WritePointer("   \n\n");
+
+        Assert.Contains("is empty", KnowledgeLocator.Resolve(_project).Error);
+    }
+
+    [Fact]
+    public void APointerIntoNowhere_IsAnErrorNotAnEmptyBase()
+    {
+        // A typo must not read as "this project has no knowledge yet" — that
+        // is the silent-loss failure the pointer exists to prevent.
+        WritePointer(@"..\..\.firepit\typo\deeper");
+
+        Assert.Contains("does not exist", KnowledgeLocator.Resolve(_project).Error);
+    }
+
+    [Fact]
+    public void APointerAtAnUncreatedDirectory_IsFineWhenItsParentExists()
+    {
+        WritePointer(@"..\..\.firepit\not-written-yet");
+
+        var resolved = KnowledgeLocator.Resolve(_project);
+        Assert.Null(resolved.Error);
+        Assert.True(resolved.IsRedirected);
+    }
+
+    // --- behaviour -------------------------------------------------------
 
     [Fact]
     public async Task ARedirectedScope_WritesNothingIntoTheProjectItself()
     {
-        _service.SyncScopes(
-        [
-            new KnowledgeScopeRegistration(
-                "public-repo", _project, KnowledgeStoreLocation.InStore(_store, "public-repo", _project)),
-        ]);
+        WritePointer(@"..\..\.firepit\appkit");
+        var docs = KnowledgeLocator.Resolve(_project).DocsDir;
+        _service.SyncScopes([Registration("appkit", _project, docs)]);
 
-        await _service.AddDocumentAsync("public-repo", "Private Finding", "Body text.", pinned: false);
+        await _service.AddDocumentAsync("appkit", "Private Finding", "Body text.", pinned: false);
 
-        var inStore = Directory.GetFiles(
-            Path.Combine(_store, "knowledge", "public-repo"), "*.md", SearchOption.AllDirectories);
-        Assert.Single(inStore);
-
-        // The whole point: nothing landed under the project's own knowledge dir.
-        Assert.False(Directory.Exists(Path.Combine(_project, ".firepit", "knowledge")));
+        Assert.Single(Directory.GetFiles(_shared, "*.md", SearchOption.AllDirectories));
+        Assert.False(Directory.Exists(Path.Combine(_firepitDir, "knowledge")));
     }
 
     [Fact]
     public async Task ARedirectedScope_StillWritesTheDigestIntoTheProject()
     {
-        _service.SyncScopes(
-        [
-            new KnowledgeScopeRegistration(
-                "public-repo", _project, KnowledgeStoreLocation.InStore(_store, "public-repo", _project)),
-        ]);
+        WritePointer(@"..\..\.firepit\appkit");
+        var docs = KnowledgeLocator.Resolve(_project).DocsDir;
+        _service.SyncScopes([Registration("appkit", _project, docs)]);
 
-        await _service.AddDocumentAsync("public-repo", "Reflex Rule", "Always do this.", pinned: true);
+        await _service.AddDocumentAsync("appkit", "Reflex Rule", "Always do this.", pinned: true);
 
-        // CLAUDE.md's `@.firepit/knowledge-pinned.md` resolves against the
-        // project root, so a digest in the store would silently stop loading.
-        var digest = Path.Combine(_project, ".firepit", "knowledge-pinned.md");
+        var digest = Path.Combine(_firepitDir, "knowledge-pinned.md");
         Assert.True(File.Exists(digest), $"expected a digest at {digest}");
         Assert.Contains("Always do this.", await File.ReadAllTextAsync(digest));
     }
