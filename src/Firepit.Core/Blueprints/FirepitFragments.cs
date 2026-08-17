@@ -83,16 +83,37 @@ public static class FirepitFragments
             return content;
         }
 
-        var isPublic = Projects.GitHubVisibility.IsPublic(projectPath);
-        return content
-            .Replace(
-                SharedToken,
-                ImportPath(projectPath, SharedPath(metaProjectPath)),
-                StringComparison.Ordinal)
-            .Replace(
+        var visibility = Projects.GitHubVisibility.Detect(projectPath);
+
+        // Not on GitHub: drop the whole import line rather than pick a class
+        // that does not apply. A dangling `@` to a fragment about public
+        // repositories would be worse than silence in a project that is never
+        // published at all.
+        if (visibility == Projects.RepoVisibility.None)
+        {
+            content = RemoveLineContaining(content, ClassToken);
+        }
+        else
+        {
+            content = content.Replace(
                 ClassToken,
-                ImportPath(projectPath, ClassPath(metaProjectPath, isPublic)),
+                ImportPath(
+                    projectPath,
+                    ClassPath(metaProjectPath, visibility == Projects.RepoVisibility.Public)),
                 StringComparison.Ordinal);
+        }
+
+        return content.Replace(
+            SharedToken,
+            ImportPath(projectPath, SharedPath(metaProjectPath)),
+            StringComparison.Ordinal);
+    }
+
+    private static string RemoveLineContaining(string content, string token)
+    {
+        var lines = content.Split('\n')
+            .Where(l => !l.Contains(token, StringComparison.Ordinal));
+        return string.Join('\n', lines);
     }
 
     /// <summary>

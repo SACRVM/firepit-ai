@@ -90,6 +90,24 @@ public sealed class FirepitFragmentsTests : IDisposable
     }
 
     [Fact]
+    public void ResolveSection_OmitsTheClassImportForAProjectThatIsNotOnGitHub()
+    {
+        // music-lib sits on a network share and is not a repo at all. Telling
+        // its agent "anything committed here is readable by anyone" is not
+        // cautious, it is false — so it gets no class fragment.
+        var notARepo = Path.Combine(_root, "music-lib");
+        Directory.CreateDirectory(notARepo);
+
+        var resolved = FirepitFragments.ResolveSection(
+            FirepitBlueprintDefaults.FragmentsSection, notARepo, _meta);
+
+        Assert.DoesNotContain("claude-github", resolved);
+        Assert.DoesNotContain(FirepitFragments.ClassToken, resolved);
+        // The shared fragment still applies — it is hosted in Firepit either way.
+        Assert.Contains("claude.md", resolved);
+    }
+
+    [Fact]
     public void ResolveSection_LeavesTokenFreeContentAlone()
     {
         var untouched = FirepitFragments.ResolveSection(

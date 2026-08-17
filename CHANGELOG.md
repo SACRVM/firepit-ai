@@ -5,6 +5,21 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.19.1] — 2026-08-17
+
+### Fixed
+
+- **A project that is not on GitHub gets no public/private fragment.** 0.19.0
+  folded two different unknowns into one answer. "It is on GitHub but the
+  visibility could not be read" defaults to public, and should — the strict
+  rule costs nothing if wrong. "It is not on GitHub at all" is a different
+  question with no answer, and treating it as public told such a project's
+  agent that anything committed there is readable by anyone, which is not
+  cautious but false. Those projects now import only the shared fragment.
+
+  Detection is a tri-state: no `.git`, or a repo whose `.git/config` names no
+  GitHub remote, means no class fragment at all.
+
 ## [0.19.0] — 2026-08-17
 
 ### Added
