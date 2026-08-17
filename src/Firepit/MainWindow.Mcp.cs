@@ -255,6 +255,15 @@ public partial class MainWindow : IMcpBackend
                 return new ToolCallResult(false, $"{projectName} has no open tab to reload");
 
             var newConfig = SafeLoadProjectConfig(project.Path);
+
+            // Knowledge scopes are re-registered here too. Where a project's
+            // documents live is not in config.json — it is `.firepit/knowledge`,
+            // a directory or a pointer file — and changing it used to take
+            // effect only on the next full project scan. Until then the scope
+            // still addressed the old directory, so a search answered from a
+            // path that no longer held anything and said nothing about it.
+            SyncKnowledgeScopes();
+
             if (restart)
             {
                 _ = entry.Session.RekindleAsync(resume: true, confirmIfBurning: false);

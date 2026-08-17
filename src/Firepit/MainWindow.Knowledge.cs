@@ -127,7 +127,19 @@ public partial class MainWindow
                     KnowledgeLayout.LocalDocsDir(metaPath), KnowledgeLayout.GlobalDocsDir(metaPath));
             }
 
-            foreach (var project in _allProjects)
+            // Projects keeping their own knowledge are registered before those
+            // pointing at someone else's. A base's owner then always claims it
+            // first, and the borrowers alias to it — so three repos sharing
+            // just-knowledge's base read as "just-knowledge" rather than as
+            // whichever of them the project scan happened to reach first.
+            // Resolution is cheap (one stat, or one small file read) and its
+            // result is reused below.
+            var ordered = _allProjects
+                .Select(p => (Project: p, Resolution: KnowledgeLocator.Resolve(p.Path)))
+                .OrderBy(x => x.Resolution.IsRedirected ? 1 : 0)
+                .ToList();
+
+            foreach (var (project, preresolved) in ordered)
             {
                 var isMeta = string.Equals(
                     Path.GetFullPath(project.Path), metaPath, StringComparison.OrdinalIgnoreCase);
@@ -163,7 +175,7 @@ public partial class MainWindow
 
                 var configuredId = ConfiguredId(project);
 
-                var resolution = KnowledgeLocator.Resolve(project.Path);
+                var resolution = preresolved;
                 if (resolution.Error is { } error)
                 {
                     // Deliberately not registered. A scope that quietly fell
@@ -316,7 +328,21 @@ public partial class MainWindow
             return string.IsNullOrEmpty(leaf) ? null : leaf;
         }
 
-        var parent = Path.GetFileName(Path.GetDirectoryName(trimmed) ?? string.Empty);
+        var parentDir = Path.GetDirectoryName(trimmed) ?? string.Empty;
+        var parent = Path.GetFileName(parentDir);
+
+        // One more level when the parent is the .firepit folder: repos sharing
+        // another repo's own base resolve to <repo>/.firepit/knowledge, whose
+        // meaningful segment is the repo, not the fixed folder name. Without
+        // this the shared base is called ".firepit" — which collides with the
+        // meta project's folder name, gets rejected as reserved, and falls back
+        // to whichever member happened to be registered first.
+        if (string.Equals(parent, ".firepit", StringComparison.OrdinalIgnoreCase))
+        {
+            var owner = Path.GetFileName(Path.GetDirectoryName(parentDir) ?? string.Empty);
+            return string.IsNullOrEmpty(owner) ? null : owner;
+        }
+
         return string.IsNullOrEmpty(parent) ? null : parent;
     }
 

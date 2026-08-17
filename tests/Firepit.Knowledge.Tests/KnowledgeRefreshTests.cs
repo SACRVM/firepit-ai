@@ -106,6 +106,33 @@ public sealed class KnowledgeRefreshTests : IDisposable
     }
 
     [Fact]
+    public async Task ADocumentsDirectoryThatDisappears_StopsAnsweringAsIfItWereEmpty()
+    {
+        // A scope registered against a directory that later goes away — moved,
+        // unmounted, or repointed at a shared base while the old registration
+        // is still live. The pass drops every row and would otherwise report a
+        // healthy, empty base: a search then says "nothing known" about
+        // documents that exist, and nothing in the answer admits the difference.
+        var docs = KnowledgeLayout.LocalDocsDir(_project);
+        Directory.CreateDirectory(docs);
+        await File.WriteAllTextAsync(
+            Path.Combine(docs, "vanishing.md"), "# Vanishing\n\nHere for now.\n");
+
+        _service.SyncScopes([new KnowledgeScopeRegistration("project", _project)]);
+        Assert.True(await Eventually(() => ScopeSees("project", "Vanishing")));
+
+        Directory.Delete(docs, recursive: true);
+        _service.SafetySweep();
+
+        Assert.True(await Eventually(async () =>
+            (await _service.CheckIntegrityAsync(["project"])).Single().Health == ScopeHealth.Failed));
+
+        var result = await _service.SearchAsync("Vanishing", ["project"], 5);
+        Assert.Empty(result.Hits);
+        Assert.NotEmpty(result.Warnings ?? []);
+    }
+
+    [Fact]
     public async Task TwoProjectsOnOneDirectory_ShareASingleIndexedBase()
     {
         // The appkit case. Registering it twice would have two watchers and two

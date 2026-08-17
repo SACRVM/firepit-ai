@@ -5,6 +5,36 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.25.1] — 2026-08-17
+
+Three defects found by using the thing: pointing two repos at a third one's
+knowledge base, which is the case the pointer file was built for and the first
+time anyone had actually done it.
+
+### Fixed
+
+- **A documents directory that disappeared kept answering as if it were
+  empty.** Repointing a project's knowledge leaves the old registration live
+  until the next full project scan. The pass then deleted every row and reported
+  a healthy, empty base — a search returned no hits, `degraded: false`, and no
+  warning, which is indistinguishable from a base that never held anything. A
+  scope now fails loudly when its directory is gone *and* documents were dropped
+  because of it. A directory that was simply never created stays silent, since
+  that is the normal state of most projects.
+
+- **`firepit_reload` did not pick up a changed knowledge location.** Where a
+  project's documents live is not in `config.json` — it is `.firepit/knowledge`,
+  a directory or a pointer file — and only a project rescan re-registered it.
+  Reload now re-syncs scopes, so a redirect takes effect without opening the
+  project picker to trigger one by accident.
+
+- **A base shared out of another repo was named after the wrong folder.** For
+  `<repo>/.firepit/knowledge` the meaningful segment is the repo, but the naming
+  rule stopped one level short and produced `.firepit` — which collides with the
+  meta project's folder name, gets rejected, and falls back to whichever member
+  the project scan reached first. Owners are now also registered before
+  borrowers, so the base carries the owner's name whatever the scan order.
+
 ## [0.25.0] — 2026-08-17
 
 An audit of the knowledge and blueprint changes from 0.21.0–0.24.0, by a

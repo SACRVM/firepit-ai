@@ -925,6 +925,24 @@ public sealed class KnowledgeService : IDisposable
                     "Knowledge scope {Scope}: pinned digest updated", scope.Name);
             }
 
+            // A documents directory that is simply not there yet is the normal
+            // state of most projects, and answering "nothing known" for one is
+            // correct. A directory that held documents and is now gone is not
+            // the same thing: the pass deletes every row and then reports a
+            // healthy, empty base — a search says nothing, and nothing in the
+            // answer distinguishes that from a base that was always empty.
+            if (stats.Removed > 0 && !Directory.Exists(scope.Store.KnowledgeDir))
+            {
+                scope.Health = ScopeHealth.Failed;
+                scope.FailureReason =
+                    $"the documents directory '{scope.Store.KnowledgeDir}' no longer exists, " +
+                    $"and {stats.Removed} document(s) were dropped from the index";
+                _logger.LogError(
+                    "Knowledge scope {Scope}: {Dir} disappeared; {Removed} document(s) dropped",
+                    scope.Name, scope.Store.KnowledgeDir, stats.Removed);
+                return;
+            }
+
             if (stats.Complete)
             {
                 scope.Health = ScopeHealth.Ready;
