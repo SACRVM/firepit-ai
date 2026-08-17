@@ -116,7 +116,14 @@ public static class ProjectScaffolding
                     projectPath,
                     metaProjectPath));
         }
-        EnsureKnowledgeReadme(projectPath);
+        // Not for a redirected project: the docs live elsewhere and the name
+        // `.firepit/knowledge` belongs to the pointer file. The digest stays
+        // either way — CLAUDE.md imports it from the project root.
+        if (!KnowledgeRedirect.IsRedirected(projectPath))
+        {
+            EnsureKnowledgeReadme(projectPath);
+        }
+
         EnsurePinnedDigestSeed(projectPath);
         var blanket          = DetectBlanketIgnores(projectPath);
         return new ProjectScaffoldResult(configPath, true, gitignoreUpdated, claudeSeeded, blanket);
@@ -127,6 +134,15 @@ public static class ProjectScaffolding
     /// survives in git — empty directories don't.</summary>
     public static bool EnsureKnowledgeReadme(string projectPath)
     {
+        // Refused rather than guarded only at the call site: creating this file
+        // means creating the directory, and the directory's name is held by the
+        // pointer file. Whoever ends up calling this next should not be able to
+        // undo a redirect by accident.
+        if (KnowledgeRedirect.IsRedirected(projectPath))
+        {
+            return false;
+        }
+
         var target = Path.Combine(
             projectPath,
             Blueprints.FirepitBlueprintDefaults.KnowledgeReadmePath.Replace('/', Path.DirectorySeparatorChar));

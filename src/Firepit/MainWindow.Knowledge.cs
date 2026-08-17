@@ -125,6 +125,11 @@ public partial class MainWindow
                     if (legacyGlobal)
                     {
                         aliases[project.Name] = KnowledgeService.GlobalScopeName;
+                        if (ConfiguredId(project) is { } metaId)
+                        {
+                            aliases[metaId] = KnowledgeService.GlobalScopeName;
+                        }
+
                         continue;
                     }
                 }
@@ -178,6 +183,19 @@ public partial class MainWindow
 
                 taken.Add(scopeName);
                 aliases[projectScope] = scopeName;
+
+                // A session exports FIREPIT_PROJECT_NAME from the configured
+                // id when there is one, so an agent asks under a name the
+                // registry has never heard of. The meta project is the live
+                // case — folder `.firepit`, id `firepit-central` — and without
+                // this every one of its searches carries a warning about its
+                // own base not existing, which teaches the agent to ignore
+                // warnings. Same defect 0.14.1 fixed in the project registry,
+                // one layer down.
+                if (ConfiguredId(project) is { } id && !aliases.ContainsKey(id))
+                {
+                    aliases[id] = scopeName;
+                }
                 byDocsDir[resolution.DocsDir] = scopeName;
                 registrations.Add(new KnowledgeScopeRegistration(
                     scopeName,
@@ -204,6 +222,24 @@ public partial class MainWindow
     /// — so the leaf says nothing and the level above carries the meaning. A
     /// directory the user named themselves is taken as-is.
     /// </remarks>
+    /// <summary>The project's configured id, when it differs from its folder name.</summary>
+    private string? ConfiguredId(Firepit.Core.Projects.Project project)
+    {
+        try
+        {
+            var id = _projectConfigStore.Load(project.Path)?.Id;
+            return string.IsNullOrWhiteSpace(id) ||
+                   string.Equals(id, project.Name, StringComparison.OrdinalIgnoreCase)
+                       ? null
+                       : id;
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Could not read the project id for {Project}", project.Name);
+            return null;
+        }
+    }
+
     private static string? BaseNameFor(string docsDir)
     {
         var trimmed = docsDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

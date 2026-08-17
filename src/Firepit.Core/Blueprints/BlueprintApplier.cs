@@ -55,7 +55,14 @@ public static class BlueprintApplier
         ArgumentNullException.ThrowIfNull(blueprint);
         ArgumentException.ThrowIfNullOrEmpty(projectPath);
 
+        // A project whose knowledge is redirected has no `.firepit/knowledge/`
+        // directory — the name is taken by the pointer file. Files that belong
+        // inside it are not missing here, they do not apply. Calling them
+        // missing would make an apply create the directory, which destroys the
+        // pointer and quietly sends a public repo's research back into itself.
+        var redirected = ProjectConfig.KnowledgeRedirect.IsRedirected(projectPath);
         var missingFiles = blueprint.Files
+            .Where(f => !(redirected && ProjectConfig.KnowledgeRedirect.IsInsideKnowledgeDir(f.RelativePath)))
             .Where(f => !File.Exists(TargetPath(projectPath, f)))
             .Select(f => f.RelativePath)
             .ToArray();

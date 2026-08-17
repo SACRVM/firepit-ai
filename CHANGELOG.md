@@ -5,6 +5,58 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-08-17
+
+All three reported from a rollout across 38 projects.
+
+### Fixed
+
+- **`firepit_blueprint_apply` destroyed the knowledge pointer file.** For a
+  redirected project `.firepit/knowledge` is a *file*; the blueprint wanted
+  `.firepit/knowledge/README.md` there, which requires a directory. The
+  apply replaced the pointer, silently undoing the redirect — so a public
+  repo went back to committing the research the pointer existed to keep out
+  of it.
+
+  The worse half was that `firepit_integrity_check` reported the correctly
+  redirected state as drift and named that very apply as the fix. An agent
+  trusting the check would cause the damage itself, which makes the check a
+  trap rather than a safeguard.
+
+  Conformance now knows about redirection, not just the apply — a file that
+  would live inside a directory the project does not have is inapplicable,
+  not missing. `EnsureKnowledgeReadme` refuses on its own too, so the next
+  caller cannot undo a redirect by accident either.
+
+  This also removes an ordering rule nobody could have known: blueprint
+  before pointer, never the other way round.
+
+- **The meta project's knowledge could not be addressed from its own
+  session.** A session exports `FIREPIT_PROJECT_NAME` from the configured
+  `id` when there is one, so the hub asked for `firepit-central` while its
+  base is registered as `global`. Every search from there carried a warning
+  that its own base does not exist — which trains an agent to skip the
+  warnings that v0.21.0 added precisely so they would be read. The
+  configured id is now an alias alongside the folder name. Same defect
+  0.14.1 fixed in the project registry, one layer down.
+
+- **The integrity check called the pre-split knowledge layout sound.** While
+  the meta repo's own `.firepit/knowledge` doubles as the global base, the
+  meta project gets no scope of its own — so *every* project pointing at it
+  resolves to no base at all, and the check reported "sound" anyway. It is
+  now an error, naming the move that fixes it.
+
+  Correcting what we said in the 0.16.0 note: moving those documents was
+  described there as "purely cosmetic — the redirect feature works without
+  it". It does not. It is the precondition.
+
+### Added
+
+- **Unknown keys in `.firepit/config.json` are reported.** A key Firepit
+  does not read is a setting its author believes is in force.
+  `knowledge.storage` was exactly that: documented in 0.16.0, replaced by
+  the pointer file in 0.17.0, and ignored in silence by every version since.
+
 ## [0.23.0] — 2026-08-17
 
 ### Added
