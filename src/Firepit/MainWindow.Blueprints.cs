@@ -1,5 +1,7 @@
+using System.IO;
 using System.Threading.Tasks;
 using Firepit.Core.Blueprints;
+using Firepit.Knowledge;
 using Firepit.Mcp;
 using Serilog;
 
@@ -15,6 +17,94 @@ public partial class MainWindow
     private const string MetaProjectMissingMessage =
         "The .firepit meta project doesn't exist yet — create it via Firepit " +
         "(Set up Firepit central project) first; blueprints live inside it.";
+
+    /// <summary>
+    /// A public repository never keeps its knowledge base inside itself.
+    /// Establishes the pointer before the blueprint runs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The blueprint was taught not to <i>destroy</i> a pointer file. It was
+    /// never taught to <i>create</i> one — so it went on giving every project a
+    /// local <c>.firepit/knowledge/</c>, public repos included, and the policy
+    /// fragment stated the rule conditionally ("if it is a pointer, that is
+    /// already arranged") about an arrangement nothing made. Twelve public
+    /// repos ended up holding a knowledge base, one of them with eleven
+    /// documents pushed to a public remote.
+    /// </para>
+    /// <para>
+    /// Running before the blueprint rather than inside it is deliberate: with
+    /// the pointer in place the existing conformance guard already treats the
+    /// local directory as inapplicable, so the rule needs no second
+    /// implementation. It also keeps <c>Firepit.Core</c> free of a reference to
+    /// <c>Firepit.Knowledge</c>, which is deliberately self-contained.
+    /// </para>
+    /// <para>
+    /// A base that already holds documents is never moved silently — the
+    /// documents are in that repository's history, and taking them out is a
+    /// decision with consequences this call cannot weigh. It reports instead.
+    /// </para>
+    /// </remarks>
+    private static (string? Action, string? Warning) EnsureKnowledgeIsHostedIfPublic(
+        string projectPath, string projectName, string metaProjectPath)
+    {
+        try
+        {
+            if (Firepit.Core.ProjectConfig.KnowledgeRedirect.IsRedirected(projectPath))
+            {
+                return (null, null);
+            }
+
+            // Detect, not Inspect: an unreadable visibility falls back to
+            // Public, and that is the safe direction here. Hosting a private
+            // repo's knowledge costs nothing and is reversible in Project
+            // settings; leaving a public repo's knowledge inside it is not.
+            if (Firepit.Core.Projects.GitHubVisibility.Detect(projectPath)
+                != Firepit.Core.Projects.RepoVisibility.Public)
+            {
+                return (null, null);
+            }
+
+            var local = KnowledgeLayout.LocalDocsDir(projectPath);
+            var hosted = KnowledgeLayout.HostedDocsDir(metaProjectPath, projectName);
+
+            if (Directory.Exists(local))
+            {
+                // README.md is the blueprint's own seed and regenerates; it is
+                // not content and does not travel to the hosted store.
+                var readme = Path.Combine(local, "README.md");
+                var documents = Directory
+                    .EnumerateFiles(local, "*", SearchOption.AllDirectories)
+                    .Where(f => !string.Equals(f, readme, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (documents.Count > 0)
+                {
+                    return (null,
+                        $"{documents.Count} knowledge document(s) live inside this public repo " +
+                        $"({local}). Blueprint apply will not move documents — open Project " +
+                        $"settings and host them at {hosted}, then commit the removal here.");
+                }
+
+                if (File.Exists(readme))
+                {
+                    File.Delete(readme);
+                }
+            }
+
+            KnowledgePointerFile.Apply(projectPath, hosted);
+            Log.Information(
+                "Knowledge for public repo {Project} is hosted at {Dir}", projectName, hosted);
+            return ($"public repo — knowledge hosted at {hosted}", null);
+        }
+        catch (Exception ex)
+        {
+            // Never fail an apply over this: the blueprint's other work is
+            // still worth doing, and the integrity check reports the state.
+            Log.Warning(ex, "Could not host knowledge for {Project}", projectName);
+            return (null, $"could not host this public repo's knowledge outside it: {ex.Message}");
+        }
+    }
 
     public async Task<BlueprintListResult> ListBlueprintsAsync()
     {
@@ -132,20 +222,34 @@ public partial class MainWindow
                     return new BlueprintApplyResult(false, $"Unknown project: {projectName}");
                 }
 
+                // Before the blueprint, not inside it: with the pointer in
+                // place the conformance guard already skips the local
+                // knowledge directory.
+                var (hostAction, hostWarning) = EnsureKnowledgeIsHostedIfPublic(
+                    project.Path, project.Name, store.MetaProjectPath);
+
                 var outcome = BlueprintApplier.Apply(
                     blueprint, project.Path, project.Name, fixBlanketIgnores,
                     // From the store, not the window: this runs off the
                     // dispatcher, and the store was built from the snapshotted
                     // root a few lines up.
                     metaProjectPath: store.MetaProjectPath);
+
+                var actions = hostAction is null
+                    ? outcome.Actions
+                    : [hostAction, .. outcome.Actions];
+                var warnings = hostWarning is null
+                    ? outcome.Warnings
+                    : [hostWarning, .. outcome.Warnings];
+
                 Log.Information(
                     "Blueprint '{Blueprint}' applied to {Project}: {Count} action(s)",
-                    blueprintName, project.Name, outcome.Actions.Count);
-                var message = outcome.Actions.Count == 0
+                    blueprintName, project.Name, actions.Count);
+                var message = actions.Count == 0
                     ? "Already conformant — nothing to do."
                     : null;
                 return new BlueprintApplyResult(
-                    true, message, project.Name, blueprintName, outcome.Actions, outcome.Warnings);
+                    true, message, project.Name, blueprintName, actions, warnings);
             });
         }
         catch (Exception ex)

@@ -24,6 +24,9 @@ public sealed class InboxWatcher : IDisposable
     public const string ProcessedDirectory = "processed";
 
     private readonly string _inboxPath;
+
+    /// <summary>Serialises counting and the compare-and-set. See <see cref="Refresh"/>.</summary>
+    private readonly object _gate = new();
     private readonly FileSystemWatcher? _fsw;
     private DateTime _seenAt = DateTime.UtcNow;
     private bool _disposed;
@@ -84,47 +87,79 @@ public sealed class InboxWatcher : IDisposable
     /// </summary>
     public void MarkAsSeen()
     {
-        _seenAt = DateTime.UtcNow;
-        if (NewSinceSeenCount != 0)
+        var raise = false;
+        lock (_gate)
         {
-            NewSinceSeenCount = 0;
+            _seenAt = DateTime.UtcNow;
+            if (NewSinceSeenCount != 0)
+            {
+                NewSinceSeenCount = 0;
+                raise = true;
+            }
+        }
+
+        if (raise)
+        {
             NewSinceSeenCountChanged?.Invoke(this, 0);
         }
     }
 
+    /// <remarks>
+    /// Counting and the compare-and-set happen under <see cref="_gate"/>. Two
+    /// callers arrive routinely — the file watcher's thread and whoever asked
+    /// explicitly — and unsynchronised they both read the old count, both find
+    /// a delta, and both raise: one arrival, two events, and a badge that
+    /// double-counts. Events are raised outside the lock so a handler is never
+    /// called with it held.
+    /// </remarks>
     public void Refresh()
     {
         try
         {
-            int unpending = 0;
-            int newSince = 0;
-            if (Directory.Exists(_inboxPath))
+            int? raiseUnpending = null;
+            int? raiseNewSince = null;
+
+            lock (_gate)
             {
-                foreach (var path in Directory.EnumerateFiles(_inboxPath, "*.md", SearchOption.TopDirectoryOnly))
+                int unpending = 0;
+                int newSince = 0;
+                if (Directory.Exists(_inboxPath))
                 {
-                    unpending++;
-                    try
+                    foreach (var path in Directory.EnumerateFiles(_inboxPath, "*.md", SearchOption.TopDirectoryOnly))
                     {
-                        if (File.GetLastWriteTimeUtc(path) > _seenAt) newSince++;
+                        unpending++;
+                        try
+                        {
+                            if (File.GetLastWriteTimeUtc(path) > _seenAt) newSince++;
+                        }
+                        catch
+                        {
+                            // Race with Move/Delete — count it as "new" rather than skip.
+                            newSince++;
+                        }
                     }
-                    catch
-                    {
-                        // Race with Move/Delete — count it as "new" rather than skip.
-                        newSince++;
-                    }
+                }
+
+                if (unpending != UnpendingCount)
+                {
+                    UnpendingCount = unpending;
+                    raiseUnpending = unpending;
+                }
+                if (newSince != NewSinceSeenCount)
+                {
+                    NewSinceSeenCount = newSince;
+                    raiseNewSince = newSince;
                 }
             }
 
-            if (unpending != UnpendingCount)
+            if (raiseUnpending is { } u)
             {
-                UnpendingCount = unpending;
-                UnpendingCountChanged?.Invoke(this, unpending);
-                UnreadCountChanged?.Invoke(this, unpending);
+                UnpendingCountChanged?.Invoke(this, u);
+                UnreadCountChanged?.Invoke(this, u);
             }
-            if (newSince != NewSinceSeenCount)
+            if (raiseNewSince is { } n)
             {
-                NewSinceSeenCount = newSince;
-                NewSinceSeenCountChanged?.Invoke(this, newSince);
+                NewSinceSeenCountChanged?.Invoke(this, n);
             }
         }
         catch

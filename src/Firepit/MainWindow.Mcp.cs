@@ -95,11 +95,22 @@ public partial class MainWindow : IMcpBackend
 
                     if (blueprint is not null)
                     {
+                        // Same rule as firepit_blueprint_apply: a public repo
+                        // never gets a knowledge base inside it.
+                        var (hostAction, hostWarning) = EnsureKnowledgeIsHostedIfPublic(
+                            resolved, byPath?.Name ?? name, store.MetaProjectPath);
+
                         var outcome = Firepit.Core.Blueprints.BlueprintApplier.Apply(
                             blueprint, resolved, byPath?.Name ?? name,
                             metaProjectPath: store.MetaProjectPath);
-                        actions = outcome.Actions;
+                        actions = hostAction is null
+                            ? outcome.Actions
+                            : [hostAction, .. outcome.Actions];
                         warnings.AddRange(outcome.Warnings);
+                        if (hostWarning is not null)
+                        {
+                            warnings.Add(hostWarning);
+                        }
                     }
                     else
                     {

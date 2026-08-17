@@ -266,6 +266,19 @@ public partial class MainWindow
                             $"{KnowledgeLayout.HostedDocsDir(metaPath, overlap.Inner)} is the usual place"));
                     }
 
+                        // --- knowledge placement policy ----------------------
+                    // Separate from the scope check above, which asks whether
+                    // the index matches the documents. This asks whether the
+                    // documents are in a defensible place at all — the question
+                    // that stayed unasked while twelve public repos held a
+                    // knowledge base and one of them pushed eleven documents.
+                    foreach (var finding in await Task.Run(
+                        () => KnowledgePlacement.Check(project.Path, project.Name, metaPath)))
+                    {
+                        findings.Add(new IntegrityFinding(
+                            finding.Severity, "knowledge", finding.Message, finding.Fix));
+                    }
+
                     // --- project config --------------------------------------
                     foreach (var unknown in await Task.Run(() => UnknownConfigKeys(project.Path)))
                     {

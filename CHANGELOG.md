@@ -5,6 +5,54 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-08-17
+
+The rule that was written down but never enforced: a public repository does not
+keep its knowledge base inside itself.
+
+### Fixed
+
+- **The blueprint gave every project a knowledge base in its own repo, public
+  ones included.** v0.24.0 taught it not to *destroy* a pointer file; it was
+  never taught to *create* one. So the mechanism that keeps research out of a
+  public repo existed only where someone had set it up by hand, in a dialog, one
+  project at a time — while the policy fragment stated the rule conditionally
+  ("if `.firepit/knowledge` is a pointer file, that is already arranged") about
+  an arrangement nothing made.
+
+  Found in the field: twelve public repos held a knowledge base, one of them
+  with eleven documents pushed to a public remote. `firepit_blueprint_apply`
+  now establishes the pointer before it runs, so the existing conformance guard
+  does the rest. A base that already holds documents is never moved silently —
+  those documents are in that repository's history, and taking them out is
+  reported, not decided.
+
+- **A redirected repo versioned its generated `knowledge-pinned.md`.** The
+  digest is compiled from documents deliberately kept outside the repo, so
+  committing it carried their text back in. Twelve repos were in this state, ten
+  of them public. Nothing had leaked — every copy still held the empty seed —
+  but pinning one document would have written its full text into a public
+  repository on the next index pass.
+
+- **`firepit_integrity_check` never asked where the documents live.** It checks
+  that the index matches them, which can be perfectly true of a base sitting in
+  a repository anyone can read; all twelve passed. It now reports both rules.
+  Reporting requires a *certain* reading of the repository's visibility, while
+  applying the rule accepts the fail-safe guess — acting on a guess here is
+  cheap and reversible, reporting a confident error on one is not.
+
+- **`InboxWatcher.Refresh` was an unsynchronised read-modify-write.** The file
+  watcher's thread and an explicit caller arrive routinely at the same moment;
+  unsynchronised, both read the old count, both find a delta, and both raise —
+  one arriving message, two events. It surfaced as a test that passed alone and
+  failed under load.
+
+### Changed
+
+- The public-repo policy fragment states the rule outright instead of assuming
+  it, and tells an agent what to do when it finds a directory where a pointer
+  belongs: stop, and say so, before saving anything.
+
 ## [0.25.3] — 2026-08-17
 
 0.25.1 and 0.25.2 published no artifacts — both tag builds failed on the same
