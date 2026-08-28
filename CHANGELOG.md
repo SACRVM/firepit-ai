@@ -5,6 +5,47 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+Two window-manners bugs, both ours, both from focus we moved and did not put
+back.
+
+### Fixed
+
+- **Opening a project dropped Firepit out of the foreground, then yanked it
+  back.** The picker forces the OS keyboard focus into its own popup HWND —
+  it has to, or typing lands in the running agent instead of the search box.
+  Closing the popup then destroyed the window holding that focus, and Windows
+  picked the successor itself: regularly another application. The window that
+  jumped back to the front a few seconds later was the new session's terminal
+  taking focus, `SetFocus` activating the top-level window along with it. The
+  popup now hands the focus back to the main window before its HWND goes away,
+  so there is nothing left to guess about and no flicker to correct.
+
+- **A session finishing its boot pulled the whole app in front of whatever you
+  had moved on to.** Revealing the terminal asked only whether its tab was the
+  selected one — true whether or not Firepit was still the app you were
+  working in. Starting a session and switching away is the normal thing to do;
+  being dragged back seconds later is not. It now takes the keyboard only when
+  Firepit already holds the foreground.
+
+- **Clicking an artifact left the keyboard on the artifact.** The row is a
+  button, and a clicked button keeps WPF's focus. Nothing shows it until you
+  leave and come back: Windows restores focus to the element that had it, the
+  terminal looks ready, and the first Space or Enter you type activates the
+  button instead — opening the attachment again. The pane now hands the
+  keyboard back to the terminal after every action, the way the tab toolbar
+  has always done, and its rows no longer take focus in the first place. The
+  caption-bar buttons were never affected; their shared style has said
+  `Focusable="False"` all along, which is what the pane was missing.
+
+- **↑ and ↓ did nothing in the project picker's search box.** The handler was
+  wired to `KeyDown`, where `TextBox`'s own class handler has already claimed
+  the arrow keys for caret movement and marked them handled — a no-op in a
+  single-line box that consumes the event all the same. Class handlers run
+  before the instance handler XAML attaches, so the arrows never arrived,
+  while Enter and Escape did, because the editor does not claim those. It
+  listens on `PreviewKeyDown` now, in front of the editor. Filter, arrow to
+  the entry you want, Enter — no mouse.
+
 ## [0.26.1] — 2026-08-17
 
 A logic pass over the day's own fixes. Three held badly.

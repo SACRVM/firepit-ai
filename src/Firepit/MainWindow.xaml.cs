@@ -140,7 +140,7 @@ public partial class MainWindow : Window
     private void RegisterKeyboardShortcuts()
     {
         Bind(new KeyGesture(System.Windows.Input.Key.T, ModifierKeys.Control | ModifierKeys.Shift),
-            (_, _) => ProjectPicker.IsOpen = !ProjectPicker.IsOpen);
+            (_, _) => TogglePicker());
         Bind(new KeyGesture(System.Windows.Input.Key.W, ModifierKeys.Control | ModifierKeys.Shift),
             (_, _) =>
             {
@@ -1313,7 +1313,20 @@ public partial class MainWindow : Window
 
     private void OnNewTabClick(object sender, RoutedEventArgs e)
     {
-        ProjectPicker.IsOpen = !ProjectPicker.IsOpen;
+        TogglePicker();
+    }
+
+    /// <summary>Open the picker, or close it the way every other close goes.</summary>
+    private void TogglePicker()
+    {
+        if (ProjectPicker.IsOpen)
+        {
+            ClosePicker();
+        }
+        else
+        {
+            ProjectPicker.IsOpen = true;
+        }
     }
 
     private void OnProjectPickerOpened(object? sender, EventArgs e)
@@ -1341,6 +1354,46 @@ public partial class MainWindow : Window
             }
             PickerSearch.Loaded += OnceLoaded;
         }
+    }
+
+    /// <summary>
+    /// Give the OS keyboard focus back to the main window before the popup's
+    /// HWND is torn down.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GrabPickerFocus"/> pushes the OS focus into the popup's own
+    /// top-level HWND — it has to, or typing lands in the WebView2 terminal
+    /// instead of the search box. The cost is that closing the popup destroys
+    /// the window currently holding the focus, and Windows then chooses the
+    /// successor on its own. It regularly chooses another application: pick a
+    /// project and Firepit drops behind whatever is next in the z-order, then
+    /// jumps back to the front once the session's terminal takes focus. Both
+    /// halves of that flicker start here, with a focus we moved and did not
+    /// put back.
+    /// </remarks>
+    private void OnProjectPickerClosed(object? sender, EventArgs e)
+    {
+        NativeFocus.ReturnOsFocusTo(this);
+    }
+
+    /// <summary>
+    /// Close the picker, focus first. Every deliberate close goes through
+    /// here; <see cref="OnProjectPickerClosed"/> is the backstop for the ones
+    /// WPF performs on its own (StaysOpen="False" click-away).
+    /// </summary>
+    /// <remarks>
+    /// Order is the whole point, which is why this exists next to a handler
+    /// that looks like it would do. Win32 <c>SetFocus</c> only works for the
+    /// thread that currently owns the foreground — so once the popup's HWND
+    /// is hidden and the focus has already gone somewhere else, the handler
+    /// firing afterwards has nothing left to do and the app stays behind.
+    /// Handing the focus back while we still hold it is the version that
+    /// works regardless of when WPF chooses to raise Closed.
+    /// </remarks>
+    private void ClosePicker()
+    {
+        NativeFocus.ReturnOsFocusTo(this);
+        ProjectPicker.IsOpen = false;
     }
 
     private void GrabPickerFocus(int attempt = 0)
@@ -1376,6 +1429,16 @@ public partial class MainWindow : Window
         RefreshPickerItems(PickerSearch.Text);
     }
 
+    /// <summary>
+    /// Wired to <c>PreviewKeyDown</c>, not <c>KeyDown</c>, and it has to stay
+    /// that way. TextBox's own class handler treats Up/Down as caret movement
+    /// and marks them handled — in a single-line box the movement does nothing,
+    /// but the event is consumed all the same. Class handlers run before the
+    /// instance handler XAML attaches, so on KeyDown this method never saw an
+    /// arrow key: Enter and Escape arrived (the editor does not claim those),
+    /// arrows silently did not, and the list could only be driven by mouse.
+    /// Tunnelling gets us in front of the editor.
+    /// </summary>
     private void OnPickerSearchKeyDown(object sender, KeyEventArgs e)
     {
         switch (e.Key)
@@ -1394,7 +1457,7 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.Escape:
-                ProjectPicker.IsOpen = false;
+                ClosePicker();
                 e.Handled = true;
                 break;
         }
@@ -1429,7 +1492,7 @@ public partial class MainWindow : Window
         }
         else if (e.Key == Key.Escape)
         {
-            ProjectPicker.IsOpen = false;
+            ClosePicker();
             e.Handled = true;
         }
     }
@@ -1531,7 +1594,7 @@ public partial class MainWindow : Window
             }
         }
 
-        ProjectPicker.IsOpen = false;
+        ClosePicker();
         var project = new Project(name, folder, ClaudeCodeAdapter.AdapterId);
         OpenSessionTabInteractive(project);
 
@@ -1545,7 +1608,7 @@ public partial class MainWindow : Window
         {
             return;
         }
-        ProjectPicker.IsOpen = false;
+        ClosePicker();
         OpenSessionTabInteractive(item.Project);
     }
 

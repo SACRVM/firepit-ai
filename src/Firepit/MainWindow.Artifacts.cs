@@ -42,6 +42,39 @@ public partial class MainWindow
         {
             SetArtifactPaneOpen(true);
         }
+
+        // Same contract the tab toolbar has held since it was written: a
+        // button in the chrome performs an action, it does not keep the
+        // keyboard. One handler on the pane root catches every button inside
+        // it. Context-menu items live in their own visual tree and never
+        // bubble here, so those call ReturnFocusToTerminal themselves.
+        ArtifactPane.AddHandler(
+            System.Windows.Controls.Primitives.ButtonBase.ClickEvent,
+            new RoutedEventHandler((_, _) => ReturnFocusToTerminal()));
+    }
+
+    /// <summary>
+    /// Hand the keyboard back to the active tab's terminal after a pane action.
+    /// </summary>
+    /// <remarks>
+    /// Without this the clicked artifact button keeps WPF's keyboard focus.
+    /// That is invisible until the user leaves and comes back: Windows restores
+    /// focus to the element that had it, the terminal looks ready but is not,
+    /// and the first Space or Enter typed goes to the button — which opens the
+    /// attachment again. A focused button is a loaded trigger, so the pane
+    /// hands the keyboard back the moment it is done with it.
+    /// </remarks>
+    private void ReturnFocusToTerminal()
+    {
+        if ((Tabs.SelectedItem as TabItem)?.Tag is SessionTab active)
+        {
+            // One tick later, for the same reason the tab-selection path
+            // defers: a focus call landing inside the click's own layout pass
+            // reaches the WebView2 hwnd before it is ready and quietly no-ops.
+            Dispatcher.BeginInvoke(
+                new Action(active.FocusTerminal),
+                System.Windows.Threading.DispatcherPriority.Input);
+        }
     }
 
     private void OnArtifactPaneToggleClick(object sender, RoutedEventArgs e) =>
@@ -193,6 +226,7 @@ public partial class MainWindow
         {
             OpenArtifact(item);
         }
+        ReturnFocusToTerminal();
     }
 
     /// <summary>
@@ -256,6 +290,7 @@ public partial class MainWindow
             Log.Warning(ex, "Could not reveal artifact {Path}", path);
             ShowToast($"Explorer error: {ex.Message}", isError: true);
         }
+        ReturnFocusToTerminal();
     }
 
     /// <summary>
@@ -303,10 +338,14 @@ public partial class MainWindow
             Log.Warning(ex, "Could not promote artifact {Path}", item.Resolved.AbsolutePath);
             ShowToast($"Could not promote: {ex.Message}", isError: true);
         }
+        ReturnFocusToTerminal();
     }
 
     private void OnArtifactRemoveClick(object sender, RoutedEventArgs e)
     {
+        // Up front rather than at the end: this method has early returns, and
+        // the call is dispatched anyway, so it still runs after the handler.
+        ReturnFocusToTerminal();
         if (ItemFrom(sender) is not { } item)
         {
             return;

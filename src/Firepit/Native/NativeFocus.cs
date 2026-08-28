@@ -24,6 +24,62 @@ internal static class NativeFocus
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr SetFocus(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    /// <summary>
+    /// True when the window the user is currently working in belongs to this
+    /// process — i.e. Firepit is the app in front, whichever of its windows,
+    /// popups or dialogs happens to hold it.
+    /// </summary>
+    /// <remarks>
+    /// The question every automatic focus call has to ask first. Win32
+    /// <c>SetFocus</c> does not only move the caret: if the top-level window
+    /// owning the target is not active, the system activates it. So handing
+    /// focus to the terminal from a background window drags the whole app in
+    /// front of whatever the user moved on to. Asking this first is the
+    /// difference between "restore the keyboard where the user already is"
+    /// and "interrupt them".
+    /// </remarks>
+    public static bool AppIsInForeground()
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero)
+        {
+            // No foreground window at all (a lock screen, a switch in
+            // progress). Not ours, and guessing "yes" here is what makes an
+            // app pop up over a locked desktop.
+            return false;
+        }
+
+        _ = GetWindowThreadProcessId(foreground, out var pid);
+        return pid == (uint)Environment.ProcessId;
+    }
+
+    /// <summary>
+    /// Hand OS keyboard focus to <paramref name="window"/>'s own HWND.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="MoveOsFocusTo"/>, and the reason it has
+    /// to exist: a popup with AllowsTransparency is a real top-level HWND, and
+    /// once we have pushed OS focus into it, closing it destroys the window
+    /// that holds the focus. Windows then picks the successor itself, and its
+    /// pick is regularly another application — the app drops out of the
+    /// foreground for no reason the user can see. Giving the focus back before
+    /// the HWND goes away leaves nothing for the system to guess about.
+    /// </remarks>
+    public static void ReturnOsFocusTo(Window window)
+    {
+        var hwnd = new WindowInteropHelper(window).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            SetFocus(hwnd);
+        }
+    }
+
     /// <summary>
     /// Move OS keyboard focus to the HWND that hosts <paramref name="visual"/>.
     /// No-op (returns false) if the visual isn't yet attached to an HwndSource

@@ -323,6 +323,7 @@
                                    VerticalAlignment="Center" />
                         <Button Grid.Column="1"
                                 x:Name="ArtifactPinButton"
+                                Focusable="False"
                                 Click="OnArtifactPinClick"
                                 Cursor="Hand"
                                 Width="24" Height="24"
@@ -355,6 +356,7 @@
                         </Button>
                         <Button Grid.Column="2"
                                 x:Name="ArtifactCloseButton"
+                                Focusable="False"
                                 Click="OnArtifactPaneCloseClick"
                                 Cursor="Hand"
                                 Width="24" Height="24"
@@ -397,6 +399,7 @@
                                     <DataTemplate>
                                         <Button Click="OnArtifactItemClick"
                                                 Tag="{Binding}"
+                                                Focusable="False"
                                                 Cursor="Hand"
                                                 HorizontalContentAlignment="Stretch"
                                                 ToolTip="{Binding ToolTipText}">
@@ -472,7 +475,8 @@
                StaysOpen="False"
                AllowsTransparency="True"
                PopupAnimation="Fade"
-               Opened="OnProjectPickerOpened">
+               Opened="OnProjectPickerOpened"
+               Closed="OnProjectPickerClosed">
             <Border Background="#15110D"
                     BorderBrush="#332B22"
                     BorderThickness="1"
@@ -496,7 +500,7 @@
                                  FontSize="{DynamicResource BaseFontSize}"
                                  Padding="8,5"
                                  TextChanged="OnPickerSearchChanged"
-                                 KeyDown="OnPickerSearchKeyDown" />
+                                 PreviewKeyDown="OnPickerSearchKeyDown" />
                     </Border>
 
                     <ListBox Grid.Row="1"

@@ -18,6 +18,7 @@ using Firepit.Core.QuickLinks;
 using Firepit.Core.Sessions;
 using Firepit.Core.State;
 using Firepit.Core.Settings;
+using Firepit.Native;
 using Firepit.Core.Terminal;
 using Firepit.Core.Time;
 using Firepit.Process;
@@ -896,7 +897,16 @@ public sealed class SessionTab : IAsyncDisposable
                 // but only if this tab is the foreground one, so a background
                 // tab lighting up doesn't steal focus from where the user is
                 // typing. One dispatcher tick lets the hwnd finish attaching.
-                if (_content.IsVisible)
+                //
+                // IsVisible answers "is this the selected tab", which is the
+                // wrong half of the question on its own: a session boots for
+                // seconds, and the user does not sit and watch it. Win32
+                // SetFocus activates the top-level window it is aimed at, so
+                // without the second test this call pulls the whole app in
+                // front of whatever they moved on to — the behaviour nobody
+                // forgives in someone else's software. Firepit takes the
+                // keyboard only where it already is.
+                if (_content.IsVisible && NativeFocus.AppIsInForeground())
                 {
                     _content.Dispatcher.BeginInvoke(
                         new Action(FocusTerminal),
