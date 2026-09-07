@@ -15,7 +15,12 @@ namespace Firepit.Core.Artifacts;
 /// </param>
 /// <param name="Label">Display name; falls back to the file name.</param>
 /// <param name="Note">One line of context ("crash repro, step 4").</param>
-/// <param name="AddedAtUtc">ISO-8601 UTC timestamp, used for ordering.</param>
+/// <param name="AddedAtUtc">
+/// ISO-8601 UTC timestamp recording when the link was pinned. A record, not
+/// the sort key: the pane orders by position (see <see cref="ArtifactOrder"/>),
+/// which is defined for hand-written entries that carry no timestamp and does
+/// not move when a clock disagrees.
+/// </param>
 public sealed record ArtifactEntry(
     string Path,
     string? Label = null,

@@ -223,4 +223,49 @@ public class JsonArtifactStoreTests : IDisposable
 
         Assert.Empty(new JsonArtifactStore().Load(_dir));
     }
+
+    [Fact]
+    public void NewestFirst_PutsTheMostRecentlyAddedOnTop()
+    {
+        ArtifactEntry[] stored = [new("first.md"), new("second.md"), new("third.md")];
+
+        var shown = ArtifactOrder.NewestFirst(stored);
+
+        Assert.Equal(["third.md", "second.md", "first.md"], shown.Select(e => e.Path));
+    }
+
+    [Fact]
+    public void NewestFirst_OrdersEntriesThatCarryNoTimestamp()
+    {
+        // Hand-written entries have no AddedAtUtc at all. Position is defined
+        // for them, which is the reason the order does not read the timestamp.
+        ArtifactEntry[] stored =
+        [
+            new("old.md", AddedAtUtc: "2026-01-01T00:00:00Z"),
+            new("handwritten.md"),
+        ];
+
+        var shown = ArtifactOrder.NewestFirst(stored);
+
+        Assert.Equal("handwritten.md", shown[0].Path);
+    }
+
+    [Fact]
+    public void NewestFirst_LeavesStorageAlone()
+    {
+        // The pane is flipped, the file is not: storage stays append-ordered
+        // so it keeps reading as the history of what was pinned.
+        ArtifactEntry[] stored = [new("a.md"), new("b.md")];
+
+        _ = ArtifactOrder.NewestFirst(stored);
+
+        Assert.Equal(["a.md", "b.md"], stored.Select(e => e.Path));
+    }
+
+    [Fact]
+    public void NewestFirst_EmptyAndNullAreEmpty()
+    {
+        Assert.Empty(ArtifactOrder.NewestFirst<ArtifactEntry>(null));
+        Assert.Empty(ArtifactOrder.NewestFirst<ArtifactEntry>([]));
+    }
 }

@@ -178,7 +178,10 @@ public partial class MainWindow
             entries = [];
         }
 
-        var items = ArtifactResolver.ResolveAll(entries, projectPath)
+        // Newest at the top. Storage stays append-ordered; only the pane is
+        // flipped, so what this session just pinned is the first thing in it.
+        var items = ArtifactOrder.NewestFirst(
+                ArtifactResolver.ResolveAll(entries, projectPath))
             .Select(a => new ArtifactItem(a))
             .ToList();
 
