@@ -35,6 +35,22 @@ public partial class ArtifactViewerWindow : Window
     private ArtifactViewerWindow(ResolvedArtifact artifact)
     {
         InitializeComponent();
+
+        // The caption row is laid out at 32px, but the close button sizes
+        // itself from DialogCaptionPixelHeight, which scales with the UI font.
+        // Every other window in Firepit reconciles the two here; this one did
+        // not, so above the default font size the button was taller than the
+        // row it sits in and the X landed off-centre. The chrome's caption
+        // height goes with it, or the draggable strip stops matching the bar.
+        if (TryFindResource("DialogCaptionPixelHeight") is double capH)
+        {
+            CaptionRow.Height = new GridLength(capH);
+            if (System.Windows.Shell.WindowChrome.GetWindowChrome(this) is { } chrome)
+            {
+                chrome.CaptionHeight = capH;
+            }
+        }
+
         _absolutePath = artifact.AbsolutePath;
         CaptionText.Text = artifact.Label;
         Title = artifact.Label;

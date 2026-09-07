@@ -132,7 +132,11 @@ public static class ArtifactPreview
           display: flex; align-items: center; justify-content: center;
           padding: 16px; min-height: 100vh; box-sizing: border-box;
         }
-        body.doc { max-width: 60rem; }
+        /* Centred, not just capped. The cap is for line length — past about
+           60rem prose stops being readable — but left-aligning it leaves a
+           dead strip down the right of a maximised window that reads as a
+           layout fault rather than a decision. */
+        body.doc { max-width: 60rem; margin-inline: auto; }
         img { max-width: 100%; height: auto; }
         h1, h2, h3, h4 { color: #F5C97B; line-height: 1.25; margin: 1.6em 0 .5em; font-weight: 600; }
         h1 { font-size: 1.7em; border-bottom: 1px solid #332B22; padding-bottom: .3em; }
@@ -167,5 +171,30 @@ public static class ArtifactPreview
           background: #1F1A14; border: 1px solid #332B22; color: #8C7A5C;
           font-family: "Segoe UI", system-ui, sans-serif; font-size: .88em;
         }
+
+        /* Chromium's default scrollbar is the one thing in this window that
+           announces it is a browser. Same slim pill the rest of Firepit uses:
+           12px like the WPF ScrollBar style, thumb inset by a 3px border in
+           the track colour — the trick terminal.html documents, because
+           transparent borders plus background-clip misbehave on WebKit
+           pseudo-scrollbars. */
+        ::-webkit-scrollbar { width: 12px; height: 12px; }
+        ::-webkit-scrollbar-track { background-color: #15110D; }
+        ::-webkit-scrollbar-thumb {
+          background-color: #5C4D3E;
+          border: 3px solid #15110D;
+          border-radius: 6px;
+          min-height: 36px;
+        }
+        ::-webkit-scrollbar-thumb:hover  { background-color: #7A6855; }
+        ::-webkit-scrollbar-thumb:active { background-color: #A89F92; }
+        ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* A code block sits on its own darker ground, so its bar has to as
+           well — otherwise the inset border shows as a lighter frame against
+           the block. */
+        pre::-webkit-scrollbar-track { background-color: #1A1612; }
+        pre::-webkit-scrollbar-thumb { border-color: #1A1612; }
+        table::-webkit-scrollbar-track { background-color: #15110D; }
         """;
 }

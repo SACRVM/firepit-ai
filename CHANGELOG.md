@@ -5,6 +5,26 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The viewer's close button did not fit its caption row.** The row is laid
+  out at 32px, but the button sizes itself from `DialogCaptionPixelHeight`,
+  which scales with the UI font — so above the default size the button was
+  taller than the row and the X sat off-centre. Seven other windows reconcile
+  the two in their constructor; the viewer, being new, was the one that did
+  not. The window chrome's caption height goes with it, or the draggable strip
+  stops matching the bar.
+
+- **The viewer used Chromium's default scrollbars.** They were the one element
+  in that window announcing it is a browser. Now the same slim bar the rest of
+  Firepit uses, with a code block's track following the block's own darker
+  ground instead of framing it.
+
+- **A maximised viewer left a dead strip down its right.** The document is
+  capped at 60rem for line length, but capping without centring pushed
+  everything to the left edge of a wide window, which reads as a layout fault
+  rather than a decision.
+
 ### Added
 
 - **Firepit can run a second time, under a name.** `Firepit.exe --instance dev`
