@@ -5,6 +5,38 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Firepit shows markdown, text and images itself.** Clicking a pinned `.md`
+  produced Windows' "choose a program" dialog, because Windows has no
+  association for markdown. Images and `.txt` were never the problem — those
+  have handlers — so the viewer covers the three kinds Firepit can render and
+  leaves everything else to the shell, which already answers correctly for a
+  PDF or an installer.
+
+  A separate window, not a pane in the tab. The tab belongs to the terminal;
+  putting a document in it is the sub-tab cockpit V1 was kept clear of. The
+  window renders, and two buttons hand the file to something that can do more.
+
+  Scripting is off in it — the document is built from a file Firepit did not
+  write, markdown may legitimately carry raw HTML, and a viewer has no reason
+  to execute anything. Links that want a new window go to the system browser.
+
+  Adds one dependency, Markdig: a CommonMark parser is not something to
+  hand-roll, and it is the one portable, dependency-free implementation for
+  .NET.
+
+### Changed
+
+- **The artifact pane shows the newest pin first.** A session pins as it
+  works, so the entry worth looking at is the one just produced; in storage
+  order it arrived below everything from every earlier session. Only the pane
+  is flipped — the file stays append-ordered and still reads as the history of
+  what was pinned, and a re-pinned file updates in place rather than jumping
+  to the top.
+
+## [0.27.0] — 2026-08-29
+
 Two window-manners bugs, both ours, both from focus we moved and did not put
 back.
 
