@@ -5,6 +5,8 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-08-29
+
 ### Added
 
 - **Firepit shows markdown, text and images itself.** Clicking a pinned `.md`
