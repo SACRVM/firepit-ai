@@ -16,10 +16,33 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        // First, before logging: ConfigureLogging opens a file under the
+        // instance's own data root, and every path read after this point
+        // depends on the answer.
+        var instanceWarning = ApplyInstanceArgument(e.Args);
+
         ConfigureLogging();
         HookUnhandledExceptions();
 
-        Log.Information("Firepit starting (pid {Pid})", Environment.ProcessId);
+        Log.Information(
+            "Firepit starting (pid {Pid}, instance {Instance})",
+            Environment.ProcessId,
+            Firepit.Core.FirepitPaths.InstanceName ?? "default");
+
+        if (instanceWarning is not null)
+        {
+            // Held until now on purpose: the logger writes into the instance's
+            // own directory, so it cannot exist before the instance is named.
+            // Logging it earlier would have gone to Serilog's silent default.
+            Log.Warning("{Warning}", instanceWarning);
+        }
+
+        // Before the settings load below: a fresh named instance has none, and
+        // an empty Firepit cannot be used to check anything.
+        if (Firepit.Core.InstanceSeed.EnsureSettingsSeeded() is { } seedNote)
+        {
+            Log.Information("{Note}", seedNote);
+        }
 
         // Load settings once at startup so font-scaling tokens are written into
         // Application.Resources BEFORE any Window XAML resolves StaticResource lookups.
@@ -123,11 +146,51 @@ public partial class App : Application
         r["TabItemPixelHeight"]        = 36.0 * scale;
     }
 
+    /// <summary>
+    /// Read <c>--instance &lt;name&gt;</c> off the command line and name this
+    /// process accordingly.
+    /// </summary>
+    /// <remarks>
+    /// A bad name is not fatal here. The point of a named instance is to be
+    /// able to run a build and look at it; refusing to start over a typo in
+    /// the switch would defeat that, so it falls back to the default instance
+    /// and the reason is returned for the caller to log once the logger
+    /// exists. Nothing has been written yet at this point, so falling back is
+    /// safe.
+    /// </remarks>
+    /// <returns>A warning to log, or null when the argument was fine.</returns>
+    private static string? ApplyInstanceArgument(string[] args)
+    {
+        string? name = null;
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (string.Equals(args[i], "--instance", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                name = args[i + 1];
+                break;
+            }
+            if (args[i].StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
+            {
+                name = args[i]["--instance=".Length..];
+                break;
+            }
+        }
+
+        try
+        {
+            Firepit.Core.FirepitPaths.Initialize(name);
+            return null;
+        }
+        catch (ArgumentException ex)
+        {
+            Firepit.Core.FirepitPaths.Initialize(null);
+            return $"Ignoring --instance and starting as the default instance: {ex.Message}";
+        }
+    }
+
     private static void ConfigureLogging()
     {
-        var logsDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Firepit", "logs");
+        var logsDir = Path.Combine(Firepit.Core.FirepitPaths.Local, "logs");
         Directory.CreateDirectory(logsDir);
 
         Log.Logger = new LoggerConfiguration()

@@ -9,7 +9,15 @@
 using System.IO.Pipes;
 using System.Text;
 
-const string PipeName = "firepit-mcp";
+// Which Firepit to dial. The GUI exports FIREPIT_INSTANCE into every agent
+// session it starts, so a bridge launched by a named instance reaches that
+// instance and never the one running beside it. The naming rule is duplicated
+// from Firepit.Core rather than referenced: this exe is a standalone tunnel by
+// design and must not drag the app's assemblies along to ship.
+var instance = Environment.GetEnvironmentVariable("FIREPIT_INSTANCE");
+var PipeName = string.IsNullOrWhiteSpace(instance)
+    ? "firepit-mcp"
+    : $"firepit-mcp-{instance.Trim()}";
 
 try
 {
@@ -20,7 +28,7 @@ try
     }
     catch (TimeoutException)
     {
-        await EmitFatalAsync(DescribeConnectTimeout());
+        await EmitFatalAsync(DescribeConnectTimeout(PipeName));
         return 1;
     }
 
@@ -61,13 +69,13 @@ catch (Exception ex)
 // exist at all or exists with every instance already taken. Guessing "GUI is
 // not running" for both is what made slot exhaustion read as a random defect
 // for months — so look before reporting.
-static string DescribeConnectTimeout()
+static string DescribeConnectTimeout(string pipeName)
 {
     bool pipeExists;
     try
     {
         pipeExists = Directory.EnumerateFiles(@"\\.\pipe\")
-            .Any(p => string.Equals(Path.GetFileName(p), PipeName, StringComparison.OrdinalIgnoreCase));
+            .Any(p => string.Equals(Path.GetFileName(p), pipeName, StringComparison.OrdinalIgnoreCase));
     }
     catch
     {

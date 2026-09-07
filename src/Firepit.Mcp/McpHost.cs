@@ -16,7 +16,11 @@ namespace Firepit.Mcp;
 /// </summary>
 public sealed class McpHost : IDisposable
 {
-    public const string PipeName    = "firepit-mcp";
+    /// <summary>
+    /// Per instance, so a bridge started by one Firepit cannot be answered by
+    /// another running beside it.
+    /// </summary>
+    public static string PipeName => Firepit.Core.FirepitPaths.McpPipeName;
 
     /// <summary>
     /// Total <see cref="NamedPipeServerStream"/> instances Windows will hand

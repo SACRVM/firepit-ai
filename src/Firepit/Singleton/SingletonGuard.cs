@@ -10,7 +10,12 @@ namespace Firepit.Singleton;
 
 public sealed class SingletonGuard : IDisposable
 {
-    public const string PipeName = "firepit-singleton";
+    /// <summary>
+    /// The pipe this instance answers to. Per instance rather than constant:
+    /// that is what lets a candidate build run beside the installed Firepit
+    /// instead of merely focusing it.
+    /// </summary>
+    public static string PipeName => Firepit.Core.FirepitPaths.SingletonPipeName;
 
     private NamedPipeServerStream? _server;
     private CancellationTokenSource? _listenerCts;

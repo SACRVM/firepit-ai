@@ -48,8 +48,5 @@ public sealed class JsonStateStore : IStateStore
         JsonSerializer.Serialize(stream, state, StateJsonContext.Default.AppState);
     }
 
-    private static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Firepit",
-        "state.json");
+    private static string DefaultPath() => Path.Combine(FirepitPaths.Local, "state.json");
 }

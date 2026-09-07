@@ -80,8 +80,5 @@ public sealed class JsonSettingsStore : ISettingsStore
         }
     }
 
-    private static string DefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Firepit",
-        "settings.json");
+    private static string DefaultPath() => Path.Combine(FirepitPaths.Roaming, "settings.json");
 }

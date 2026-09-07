@@ -3,17 +3,31 @@
 # by always pointing to src/Firepit/bin/{Config}/Firepit.exe (the path that
 # Directory.Build.props guarantees via AppendTargetFrameworkToOutputPath=false).
 #
+# Runs as a SEPARATE instance ('dev') by default, so it can be started next to
+# the installed Firepit -- including one that is hosting an agent session --
+# without disturbing it. Its settings, state, logs and browser profile live in
+# Firepit-dev alongside the real ones; nothing is shared.
+#
 # Usage:
-#   ./run.ps1                # Debug build + run (default -- fast iteration)
+#   ./run.ps1                # Debug build + run as the 'dev' instance
 #   ./run.ps1 -Release       # Release build + run (realistic perf)
 #   ./run.ps1 -NoBuild       # Skip build, just launch the existing exe
 #   ./run.ps1 -Clean         # Wipe stale TFM/RID output dirs first, then build+run
+#   ./run.ps1 -Instance beta # Some other named instance, its own data again
+#   ./run.ps1 -Instance ''   # Run as the DEFAULT instance -- kills an installed
+#                            # Firepit that is running, agent session included
 
 [CmdletBinding()]
 param(
     [switch]$Release,
     [switch]$NoBuild,
-    [switch]$Clean
+    [switch]$Clean,
+    # Which Firepit to be. Defaults to 'dev': a separate instance with its own
+    # settings, state, logs and browser profile, which can run beside the
+    # installed Firepit instead of replacing it. Pass -Instance '' to run as
+    # the default instance -- that one DOES kill an installed Firepit that is
+    # already running, including the one hosting an agent session.
+    [string]$Instance = 'dev'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,13 +37,29 @@ $exePath  = Join-Path $repoRoot "src/Firepit/bin/$config/Firepit.exe"
 
 function Write-Status($msg) { Write-Host "[run.ps1] $msg" -ForegroundColor Cyan }
 
-# 1. Kill any running Firepit instance -- releases the file lock on Firepit.exe
-#    and the singleton mutex so the new launch becomes the primary instance.
-$running = @(Get-Process -Name Firepit -ErrorAction SilentlyContinue)
+# 1. Kill the running copy of THIS instance -- releases the file lock on
+#    Firepit.exe and its singleton pipe. Deliberately not every Firepit: this
+#    script used to kill them all, which included the installed one, which
+#    included the window an agent session was running in. Testing a change
+#    therefore meant destroying the session making it, and the UI shipped
+#    unlooked-at. Matching on the command line keeps the two apart.
+$firepitProcs = @(Get-CimInstance Win32_Process -Filter "Name='Firepit.exe'" -ErrorAction SilentlyContinue)
+if ($Instance) {
+    $pattern = "--instance[=\s]+$([regex]::Escape($Instance))(\s|$)"
+    $running = @($firepitProcs | Where-Object { $_.CommandLine -match $pattern })
+    $label   = "'$Instance' instance"
+} else {
+    $running = @($firepitProcs | Where-Object { $_.CommandLine -notmatch '--instance' })
+    $label   = 'default instance'
+}
 if ($running.Count -gt 0) {
-    Write-Status "Killing $($running.Count) running Firepit instance(s)..."
-    $running | Stop-Process -Force
+    Write-Status "Killing $($running.Count) running Firepit ($label)..."
+    $running | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 600
+}
+$survivors = @($firepitProcs).Count - $running.Count
+if ($survivors -gt 0) {
+    Write-Status "Leaving $survivors other Firepit instance(s) alone."
 }
 
 # 2. Optional: clear stale TFM/RID output dirs left from pre-V1.12 builds where
@@ -73,5 +103,10 @@ if (-not (Test-Path $exePath)) {
     exit 1
 }
 $builtAge = [Math]::Round(([DateTime]::UtcNow - (Get-Item $exePath).LastWriteTimeUtc).TotalSeconds, 0)
-Write-Status "Launching src/Firepit/bin/$config/Firepit.exe (built $builtAge s ago)"
-Start-Process $exePath
+if ($Instance) {
+    Write-Status "Launching src/Firepit/bin/$config/Firepit.exe as instance '$Instance' (built $builtAge s ago)"
+    Start-Process $exePath -ArgumentList '--instance', $Instance
+} else {
+    Write-Status "Launching src/Firepit/bin/$config/Firepit.exe as the DEFAULT instance (built $builtAge s ago)"
+    Start-Process $exePath
+}

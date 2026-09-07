@@ -49,9 +49,7 @@ public partial class MainWindow
     {
         try
         {
-            var dataRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Firepit");
+            var dataRoot = Firepit.Core.FirepitPaths.Local;
             _knowledgeLoggerFactory = new SerilogLoggerFactory(Log.Logger);
             _knowledgeService = new KnowledgeService(dataRoot, _knowledgeLoggerFactory);
             SyncKnowledgeScopes();

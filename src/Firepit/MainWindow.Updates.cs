@@ -50,6 +50,18 @@ public partial class MainWindow
     /// </summary>
     private void StartUpdateChecks()
     {
+        // A named instance is a build someone is looking at, not an
+        // installation. Telling it to update would offer to replace a
+        // candidate with the released version — the opposite of why it is
+        // running. (Self-installing is already impossible there: the check
+        // for unins000.exe beside the exe fails for anything not installed.)
+        if (!Firepit.Core.FirepitPaths.IsDefaultInstance)
+        {
+            Log.Information(
+                "Update checks off in instance {Instance}", Firepit.Core.FirepitPaths.InstanceName);
+            return;
+        }
+
         var cfg = _settings.Updates ?? UpdateSettings.Defaults;
         if (!cfg.CheckForUpdates)
         {

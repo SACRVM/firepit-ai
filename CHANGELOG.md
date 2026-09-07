@@ -5,6 +5,34 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Firepit can run a second time, under a name.** `Firepit.exe --instance dev`
+  starts a separate Firepit beside the installed one: its own singleton pipe,
+  its own MCP pipe, its own settings, state, logs, browser profile and
+  knowledge index. The default instance is unnamed and its paths are unchanged,
+  so an existing installation notices nothing.
+
+  This is what was missing behind "we release things nobody looked at". Firepit
+  is single-instance, so a candidate build could not be started while the real
+  one was running — and the real one is usually hosting the agent session doing
+  the work. Trying a change meant destroying the window making it, so UI work
+  went out unexamined and the release was the first viewing.
+
+  A named instance seeds its settings from the installed Firepit on first run,
+  because an empty Firepit cannot be used to check anything. It copies
+  configuration only, never `state.json`: restoring the open-tab list would
+  have a test instance launch a live agent per project the moment it starts.
+  Update checks are off in a named instance — a candidate has no business
+  offering to replace itself with the release.
+
+  The window says which one it is, in the title and as a badge in the caption.
+  A second Firepit that looks identical to the first gets typed into.
+
+  `./run.ps1` now runs the `dev` instance by default and kills only that one,
+  matching on the command line. It used to kill every Firepit on the machine.
+  `-Instance ''` restores the old behaviour, and says so.
+
 ## [0.28.0] — 2026-08-29
 
 ### Added

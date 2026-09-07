@@ -20,10 +20,10 @@ public static class FirepitWebViewEnvironment
 
     private static async Task<CoreWebView2Environment> CreateAsync()
     {
-        var userDataFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Firepit",
-            "WebView2");
+        // Per instance, like everything else: two Firepits sharing one browser
+        // profile fight over its lock files, and the loser starts without a
+        // terminal at all.
+        var userDataFolder = Path.Combine(Firepit.Core.FirepitPaths.Local, "WebView2");
         Directory.CreateDirectory(userDataFolder);
         return await CoreWebView2Environment.CreateAsync(userDataFolder: userDataFolder);
     }

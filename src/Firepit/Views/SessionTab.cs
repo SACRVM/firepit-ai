@@ -642,6 +642,12 @@ public sealed class SessionTab : IAsyncDisposable
             var env = new Dictionary<string, string?>(spec.EnvironmentOverrides ?? new Dictionary<string, string?>(), StringComparer.OrdinalIgnoreCase)
             {
                 ["FIREPIT_PROJECT_NAME"] = _currentConfig?.Id ?? Context.Name,
+                // Which Firepit this session belongs to. The bridge dials the
+                // pipe named by it, so a session started here can only ever
+                // reach the Firepit that started it — not another instance
+                // running beside it.
+                [Firepit.Core.FirepitPaths.InstanceEnvironmentVariable] =
+                    Firepit.Core.FirepitPaths.InstanceName ?? string.Empty,
             };
 
             _ptyChannel = await ConPtyLauncher.SpawnAsync(

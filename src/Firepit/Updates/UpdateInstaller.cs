@@ -49,9 +49,7 @@ internal static class UpdateInstaller
             throw new InvalidOperationException("Release has no installer asset to download.");
         }
 
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Firepit", "updates");
+        var dir = Path.Combine(Firepit.Core.FirepitPaths.Local, "updates");
         Directory.CreateDirectory(dir);
 
         var name = string.IsNullOrEmpty(info.InstallerAssetName)

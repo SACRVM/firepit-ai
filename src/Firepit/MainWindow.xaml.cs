@@ -86,6 +86,19 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Say which Firepit this is, in the taskbar and on the window itself.
+        // Only when it is not the installed one — an ordinary Firepit should
+        // look ordinary.
+        if (!Firepit.Core.FirepitPaths.IsDefaultInstance)
+        {
+            Title = $"Firepit{Firepit.Core.FirepitPaths.DisplaySuffix}";
+            InstanceBadgeText.Text = Firepit.Core.FirepitPaths.InstanceName;
+            InstanceBadge.ToolTip =
+                $"Separate instance '{Firepit.Core.FirepitPaths.InstanceName}' — its own settings, " +
+                "state and logs. Nothing here touches the installed Firepit.";
+            InstanceBadge.Visibility = Visibility.Visible;
+        }
+
         _adapters = new Dictionary<string, IAgentAdapter>(StringComparer.OrdinalIgnoreCase)
         {
             [ClaudeCodeAdapter.AdapterId] = new ClaudeCodeAdapter(),

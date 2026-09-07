@@ -40,11 +40,30 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Button Grid.Column="0"
-                    x:Name="AboutButton"
-                    Style="{StaticResource AppIconButton}"
-                    Click="OnAboutClick"
-                    ToolTip="About Firepit" />
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button x:Name="AboutButton"
+                        Style="{StaticResource AppIconButton}"
+                        Click="OnAboutClick"
+                        ToolTip="About Firepit" />
+
+                <!-- Only ever visible in a named instance. A second Firepit
+                     that looks identical to the installed one gets typed into
+                     by mistake, so the badge is the point, not decoration. -->
+                <Border x:Name="InstanceBadge"
+                        Visibility="Collapsed"
+                        VerticalAlignment="Center"
+                        Background="#2A211A"
+                        BorderBrush="#4A3D2C"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="6,1"
+                        Margin="2,0,4,0">
+                    <TextBlock x:Name="InstanceBadgeText"
+                               Foreground="#F5C97B"
+                               FontFamily="Cascadia Code, Consolas, Courier New"
+                               FontSize="{DynamicResource SmallFontSize}" />
+                </Border>
+            </StackPanel>
 
             <!-- Tabs column is '*' so the TabControl never claims more width than
                  is left between About (col 0) and the right caption panel (col 3).
