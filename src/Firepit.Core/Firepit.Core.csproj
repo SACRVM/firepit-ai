@@ -8,6 +8,11 @@
 
   <ItemGroup>
     <PackageReference Include="NCrontab" Version="3.3.3" />
+    <!-- Markdown → HTML for the artifact viewer. A CommonMark parser is not
+         something to hand-roll, and Markdig is the one portable, dependency-free
+         implementation for .NET; it keeps the rendering in Core where it stays
+         unit-testable instead of pushing it into the WebView2 layer. -->
+    <PackageReference Include="Markdig" Version="0.42.0" />
   </ItemGroup>
 
   <ItemGroup>

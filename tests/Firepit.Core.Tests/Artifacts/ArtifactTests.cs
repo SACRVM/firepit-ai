@@ -268,4 +268,86 @@ public class JsonArtifactStoreTests : IDisposable
         Assert.Empty(ArtifactOrder.NewestFirst<ArtifactEntry>(null));
         Assert.Empty(ArtifactOrder.NewestFirst<ArtifactEntry>([]));
     }
+
+    [Theory]
+    [InlineData(ArtifactKind.Markdown, true)]
+    [InlineData(ArtifactKind.Text, true)]
+    [InlineData(ArtifactKind.Image, true)]
+    [InlineData(ArtifactKind.Document, false)]
+    [InlineData(ArtifactKind.Executable, false)]
+    [InlineData(ArtifactKind.Archive, false)]
+    [InlineData(ArtifactKind.Other, false)]
+    public void CanPreview_ClaimsOnlyWhatFirepitRenders(ArtifactKind kind, bool expected)
+    {
+        // The false cases matter more than the true ones: a PDF or an installer
+        // has a real handler, and a half-built viewer would be worse than it.
+        Assert.Equal(expected, ArtifactPreview.CanPreview(kind));
+    }
+
+    [Fact]
+    public void Build_RendersMarkdownStructure()
+    {
+        var html = ArtifactPreview.Build(
+            ArtifactKind.Markdown, "report.md", "# Title\n\nSome **bold** text.\n");
+
+        Assert.Contains("<h1", html, StringComparison.Ordinal);
+        Assert.Contains("Title", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>bold</strong>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_RendersMarkdownTables()
+    {
+        // Tables come from the advanced extensions; a report without them
+        // renders as a wall of pipes, which is the common real-world case.
+        var html = ArtifactPreview.Build(
+            ArtifactKind.Markdown, "r.md", "| a | b |\n|---|---|\n| 1 | 2 |\n");
+
+        Assert.Contains("<table", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_EscapesPlainTextInsteadOfRenderingIt()
+    {
+        // A pinned log is not markup. Left unescaped, a line of HTML in a build
+        // log would be rendered as HTML — at best mangling the log, at worst
+        // acting on content Firepit did not write.
+        var html = ArtifactPreview.Build(
+            ArtifactKind.Text, "build.log", "<script>alert(1)</script> & <b>x</b>");
+
+        Assert.DoesNotContain("<script>", html, StringComparison.Ordinal);
+        Assert.Contains("&lt;script&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("&amp;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_PointsAnImageAtTheVirtualHostNotTheFileSystem()
+    {
+        // WebView2 refuses file://, so the image is reached through the mapped
+        // host — the same rule the terminal's assets live by.
+        var html = ArtifactPreview.Build(ArtifactKind.Image, "shot 1.png", null);
+
+        Assert.Contains($"<base href=\"https://{ArtifactPreview.VirtualHost}/\">", html, StringComparison.Ordinal);
+        Assert.Contains("shot%201.png", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("file://", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_TruncatesHugeTextAndSaysSo()
+    {
+        var huge = new string('x', ArtifactPreview.MaxTextChars + 500);
+
+        var html = ArtifactPreview.Build(ArtifactKind.Text, "huge.log", huge);
+
+        Assert.Contains("Truncated", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(new string('x', ArtifactPreview.MaxTextChars + 1), html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_EscapesTheFileNameInTheTitle()
+    {
+        var html = ArtifactPreview.Build(ArtifactKind.Text, "<evil>.txt", "hi");
+
+        Assert.Contains("&lt;evil&gt;.txt", html, StringComparison.Ordinal);
+    }
 }

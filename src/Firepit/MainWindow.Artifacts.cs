@@ -248,6 +248,19 @@ public partial class MainWindow
         }
         try
         {
+            // Markdown, text and images render in Firepit's own viewer; every
+            // other kind goes to the handler the machine already has. The split
+            // is not a preference — .md has no association on Windows, so the
+            // click that should show a report opened a "choose a program"
+            // dialog, while a PDF or an installer was always handled properly.
+            // TryShow returns false for anything it will not render, including
+            // a file it could not read, and the shell then answers as before.
+            if (ArtifactViewerWindow.TryShow(this, item.Resolved))
+            {
+                Log.Information("Artifact viewed: {Kind} {Path}", item.Resolved.Kind, path);
+                return;
+            }
+
             // Fully qualified: bare `Process` binds to the Firepit.Process
             // namespace from inside namespace Firepit.
             System.Diagnostics.Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });

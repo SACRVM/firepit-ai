@@ -1,0 +1,102 @@
+<Window x:Class="Firepit.Views.ArtifactViewerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Artifact"
+        Width="900"
+        Height="720"
+        MinWidth="420"
+        MinHeight="300"
+        Background="#15110D"
+        Icon="/firepit.ico"
+        BorderBrush="#332B22"
+        BorderThickness="1"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome
+            CaptionHeight="32"
+            CornerRadius="0"
+            GlassFrameThickness="0"
+            ResizeBorderThickness="6"
+            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Window.Resources>
+        <Style x:Key="ViewerButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#A89F92" />
+            <Setter Property="FontFamily" Value="Cascadia Code, Consolas, Courier New" />
+            <Setter Property="FontSize" Value="{DynamicResource SmallFontSize}" />
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#221C16" TargetName="Bd" />
+                                <Setter Property="Foreground" Value="#E8E2D8" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="CaptionRow" Height="32" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Caption -->
+        <Grid Grid.Row="0" Background="#0A0805">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="CaptionText"
+                       Grid.Column="0"
+                       Foreground="#A89F92"
+                       FontFamily="Cascadia Code, Consolas, Courier New"
+                       FontSize="{DynamicResource BaseFontSize}"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"
+                       Margin="14,0,8,0" />
+            <Button Grid.Column="1"
+                    Style="{StaticResource CaptionCloseButton}"
+                    Width="{DynamicResource DialogCaptionPixelHeight}"
+                    Height="{DynamicResource DialogCaptionPixelHeight}"
+                    Click="OnCloseClick"
+                    ToolTip="Close (Esc)" />
+        </Grid>
+
+        <!-- The rendered artifact. The WebView2 is added from code-behind:
+             its type belongs to Firepit.Web and must not appear out here. -->
+        <Border Grid.Row="1" x:Name="ViewerHost" Background="#15110D" />
+
+        <!-- The two ways out of the viewer, for the cases it cannot serve:
+             an editor, or the folder the file sits in. -->
+        <Border Grid.Row="2" Background="#120E0A" BorderBrush="#241D16" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="8,5">
+                <Button Style="{StaticResource ViewerButton}"
+                        Content="Show in Explorer"
+                        Click="OnRevealClick" />
+                <Button Style="{StaticResource ViewerButton}"
+                        Content="Open externally"
+                        Click="OnOpenExternallyClick" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
