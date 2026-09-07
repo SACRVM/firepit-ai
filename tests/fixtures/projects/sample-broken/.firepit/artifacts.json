@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "path": "reports/deleted-report.md",
+      "label": "Report that was deleted",
+      "note": "The target does not exist. The row renders dimmed with its path, so a dead link is visible instead of looking fine until clicked.",
+      "addedAtUtc": "2026-09-01T09:00:00.0000000Z"
+    },
+    {
+      "path": "dist/bundle.zip",
+      "label": "Archive (viewer refuses this one)",
+      "note": "Exists, but is not a kind Firepit renders - the click has to fall through to the system handler.",
+      "addedAtUtc": "2026-09-02T09:00:00.0000000Z"
+    }
+  ]
+}

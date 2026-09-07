@@ -5,6 +5,25 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Three fixture projects to look at Firepit with**, under
+  `tests/fixtures/projects`. Point a named instance's project root there and it
+  discovers them like any others: one with a markdown report, a long text log
+  and an image; one empty, which is the only way to see the artifact pane's
+  empty state twice; one holding the failures — an artifact whose file was
+  deleted, and an archive the viewer refuses so the click falls through to the
+  system handler.
+
+  They exist so a candidate build can be checked against something that is not
+  a real repository. Pointing the dev instance at `D:\repos` worked, but it put
+  a second agent in a working tree that was already in use, and the two looked
+  identical from the inside.
+
+  Opening a fixture starts PowerShell, not an agent — each one's
+  `.firepit/config.json` overrides the agent command. Looking at the interface
+  should not cost a session.
+
 ### Fixed
 
 - **The viewer's close button did not fit its caption row.** The row is laid

@@ -77,3 +77,21 @@ coverage/
 .firepit/knowledge.db*
 !.firepit/config.json
 .claude/settings.local.json
+
+# Test fixtures are the exception to everything above. They are fake projects
+# whose point is to be checked out complete — a .log or a .firepit file in
+# there is content, not build output.
+!tests/fixtures/**
+
+# ...but output a running Firepit writes *into* a fixture is still output, and
+# the exemption above would otherwise make a SQLite index committable in a
+# public repo. Re-excluded here, after it, so this wins.
+tests/fixtures/**/knowledge.db*
+tests/fixtures/**/.firepit/runs/
+tests/fixtures/**/.firepit/inbox/
+tests/fixtures/**/.claude/settings.local.json
+
+# Note for anyone adding a fixture: do not put files in a directory named
+# `logs/`. Git does not descend into an excluded directory, so no negation can
+# rescue what is inside one — the fixture log lives in `output/` for that
+# reason, and `*.log` alone would have swallowed it too.

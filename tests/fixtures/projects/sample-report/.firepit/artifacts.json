@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "path": "docs/report.md",
+      "label": "Rendering report",
+      "note": "Markdown with the things a real report has: table, code, quote, list, image",
+      "addedAtUtc": "2026-09-01T09:00:00.0000000Z"
+    },
+    {
+      "path": "output/build.log",
+      "label": "Build log",
+      "note": "Plain text with lines long enough to need a horizontal scrollbar",
+      "addedAtUtc": "2026-09-02T09:00:00.0000000Z"
+    },
+    {
+      "path": "docs/diagram.png",
+      "label": "Diagram",
+      "note": "Image, reached through the viewer's virtual host",
+      "addedAtUtc": "2026-09-03T09:00:00.0000000Z"
+    }
+  ]
+}

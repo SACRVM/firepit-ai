@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "sample-empty",
+  "agent": {
+    "command": "powershell",
+    "args": [
+      "-NoLogo",
+      "-NoExit",
+      "-Command",
+      "Write-Host 'Fixture project - no agent here.'"
+    ]
+  }
+}
