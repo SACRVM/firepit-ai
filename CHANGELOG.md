@@ -44,6 +44,17 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   everything to the left edge of a wide window, which reads as a layout fault
   rather than a decision.
 
+- **Inbox delivery typed into a half-written prompt.** Auto-delivery waited
+  for the agent to go quiet, but an agent sitting idle can still have the user
+  mid-sentence in its input box — a pause to think makes no sound on the PTY.
+  The prompt landed on the end of the line and the Enter after it sent both.
+  Firepit now notes from the keystrokes it forwards whether anything typed is
+  still unsent, and holds delivery until it goes out; the message waits in the
+  inbox meanwhile, as it does for a busy session. Only keystrokes are looked
+  at, never the agent's output. The guess leans towards "unsent": a line
+  backspaced back to empty still holds delivery until the next Enter, which
+  costs a delay rather than a draft.
+
 ### Added
 
 - **Firepit can run a second time, under a name.** `Firepit.exe --instance dev`

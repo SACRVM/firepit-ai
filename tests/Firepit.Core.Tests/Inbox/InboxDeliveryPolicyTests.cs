@@ -149,4 +149,30 @@ public class InboxDeliveryPolicyTests
         Assert.Equal(InboxDeliveryFlavour.Act,
             policy.Evaluate(Project, SessionState.Embers, false, OneMessage).Flavour);
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NeverDeliversIntoAHalfTypedLine(bool isUsersFocusedTab)
+    {
+        var decision = Settled()
+            .Evaluate(Project, SessionState.Embers, isUsersFocusedTab, OneMessage, hasUnsentInput: true);
+
+        Assert.Equal(InboxDeliveryFlavour.None, decision.Flavour);
+    }
+
+    [Fact]
+    public void SendingTheLineMakesTheSessionSettleAgain()
+    {
+        var policy = new InboxDeliveryPolicy(idleSweepsRequired: 2);
+
+        policy.Evaluate(Project, SessionState.Embers, false, OneMessage);
+        policy.Evaluate(Project, SessionState.Embers, false, OneMessage, hasUnsentInput: true);
+
+        // The typing broke the streak; one quiet sweep after it is not enough.
+        Assert.Equal(InboxDeliveryFlavour.None,
+            policy.Evaluate(Project, SessionState.Embers, false, OneMessage).Flavour);
+        Assert.Equal(InboxDeliveryFlavour.Act,
+            policy.Evaluate(Project, SessionState.Embers, false, OneMessage).Flavour);
+    }
 }

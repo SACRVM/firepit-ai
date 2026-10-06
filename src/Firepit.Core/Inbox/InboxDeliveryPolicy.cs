@@ -35,6 +35,10 @@ public sealed record InboxDeliveryDecision(
 ///   <see cref="InboxDeliveryPolicy(int)">several consecutive sweeps</see>
 ///   qualifies. Anything else resets the streak, so a session has to look
 ///   settled again rather than merely pause.</item>
+///   <item><b>Never into a half-typed line.</b> An idle agent can still have
+///   the user mid-sentence in its input box; a prompt delivered then is
+///   appended to the user's text and submitted with it. Unsent input counts
+///   as not settled.</item>
 ///   <item><b>Never twice.</b> An id handed over is remembered, so a message
 ///   the agent leaves sitting in the folder is not re-delivered on every
 ///   sweep.</item>
@@ -62,16 +66,19 @@ public sealed class InboxDeliveryPolicy
     /// be delivered. Call once per sweep per project — it advances the idle
     /// streak as a side effect.
     /// </summary>
+    /// <param name="hasUnsentInput">The user has typed into the agent's input
+    /// line and not sent it — see <see cref="UnsentInputTracker"/>.</param>
     public InboxDeliveryDecision Evaluate(
         string projectKey,
         SessionState state,
         bool isUsersFocusedTab,
-        IEnumerable<string> pendingIds)
+        IEnumerable<string> pendingIds,
+        bool hasUnsentInput = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(projectKey);
         ArgumentNullException.ThrowIfNull(pendingIds);
 
-        if (state != SessionState.Embers)
+        if (state != SessionState.Embers || hasUnsentInput)
         {
             _idleStreak[projectKey] = 0;
             return InboxDeliveryDecision.Hold;

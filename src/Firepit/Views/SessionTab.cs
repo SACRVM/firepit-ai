@@ -46,6 +46,7 @@ public sealed class SessionTab : IAsyncDisposable
     private readonly TerminalThemeSettings? _terminalTheme;
     private readonly int _terminalFontSize;
     private readonly ActivityDetector _detector;
+    private readonly UnsentInputTracker _unsentInput = new();
     private readonly Grid _content;
     private readonly Grid _terminalArea;
     private readonly TextBlock _statusText;
@@ -415,6 +416,13 @@ public sealed class SessionTab : IAsyncDisposable
     public SessionState State => _detector.State;
 
     /// <summary>
+    /// The user has typed into the agent's input line and not sent it yet.
+    /// Automated delivery holds while this is true, or its prompt would be
+    /// appended to the half-typed line and submitted with it.
+    /// </summary>
+    public bool HasUnsentInput => _unsentInput.HasUnsentInput;
+
+    /// <summary>
     /// True once <see cref="EnsureInitializedAsync"/> or
     /// <see cref="RekindleAsync"/> has been called for this tab. Deferred
     /// tabs (created on restore but not yet activated) return false; their
@@ -597,6 +605,7 @@ public sealed class SessionTab : IAsyncDisposable
             var ct = cts.Token;
 
             _detector.NotifyIgniting();
+            _unsentInput.Reset();
             _tickTimer.Start();
             ShowLoadingIndicator();
 
@@ -832,6 +841,7 @@ public sealed class SessionTab : IAsyncDisposable
         {
             return;
         }
+        _unsentInput.Observe(data.Span);
         try
         {
             await _ptyChannel.WriteAsync(data, _cts.Token);

@@ -106,7 +106,8 @@ public partial class MainWindow
                       && ReferenceEquals(selected, _openTabs.GetValueOrDefault(projectPath).TabItem);
 
         var decision = _deliveryPolicy.Evaluate(
-            projectPath, session.State, isUsersTab, PendingIds(projectPath));
+            projectPath, session.State, isUsersTab, PendingIds(projectPath),
+            hasUnsentInput: session.HasUnsentInput);
         if (decision.Flavour == InboxDeliveryFlavour.None) return;
 
         var prompt = decision.Flavour == InboxDeliveryFlavour.PresentAndWait
