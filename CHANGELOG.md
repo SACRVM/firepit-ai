@@ -5,6 +5,8 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.29.1] — 2026-10-06
+
 ### Fixed
 
 - **The About dialog stopped opening after Windows Terminal updated.** Its
