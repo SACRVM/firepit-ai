@@ -5,6 +5,8 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-10-06
+
 ### Added
 
 - **Three fixture projects to look at Firepit with**, under
