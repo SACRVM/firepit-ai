@@ -26,6 +26,34 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Fixed
 
+- **Knowledge search died everywhere when a temp cleaner ran** (#17). The
+  single-file exe extracts its natives to `%TEMP%\.net\Firepit\<hash>\`, and
+  SQLite loads the sqlite-vec extension per connection and frees it again —
+  so between two searches `vec0.dll` was the one file there nobody held open.
+  Storage Sense deleted it, and from then on every search in every project
+  failed with "The specified module could not be found" until Firepit was
+  restarted. Now the extension is copied out of `%TEMP%` into
+  `%LOCALAPPDATA%\Firepit\native\` at startup, loaded from there, and held
+  for the life of the process, which is what stops Windows deleting it. A
+  load that fails anyway looks for the file again and retries once.
+
+  If it still cannot be loaded, search answers from full-text alone, says it
+  is degraded and why, instead of failing outright. Four things that made the
+  failure worse are fixed with it:
+  - The integrity check called a missing extension "index unreadable" and
+    recommended `repair=true`. It now names the runtime, says a repair cannot
+    help and suggests a restart — and withholds every repair while the
+    extension is missing, since each of them needs it.
+  - That repair deleted the index first and rebuilt it after; when the
+    rebuild failed, the index was a 0-byte file. A rebuild now goes into a
+    scratch file and replaces the old index only once it is complete.
+  - A search in which every base failed reported `degraded: false`. Any base
+    that could not be searched now makes the result degraded, and when none
+    could be searched at all the tool answers `ok: false` rather than an
+    empty list that reads as "nothing known".
+  - The degraded note always blamed the embedding model. It now gives the
+    actual reason.
+
 - **The viewer's close button did not fit its caption row.** The row is laid
   out at 32px, but the button sizes itself from `DialogCaptionPixelHeight`,
   which scales with the UI font — so above the default size the button was

@@ -511,14 +511,15 @@ public partial class MainWindow
                 }
             }
 
-            if (result.Degraded)
+            if (result.DegradedReason is { } reason)
             {
-                notes.Add(
-                    "Vector search unavailable (embedding model not ready) — results are full-text only.");
+                notes.Add(reason);
             }
 
+            // Every base asked failed. Answering ok with an empty list invites
+            // "nothing is known about this"; the failure is the answer.
             return new Firepit.Mcp.KnowledgeSearchResult(
-                true,
+                !result.NothingSearched,
                 notes.Count > 0 ? string.Join(" ", notes) : null,
                 hits,
                 result.Degraded);

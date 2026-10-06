@@ -200,15 +200,20 @@ public partial class MainWindow
                                     !scope.IsRegistered ||
                                     scope.MissingFromIndex.Count > 0 ||
                                     scope.OutOfDate.Count > 0 ||
-                                    scope.IndexError is not null
+                                    scope.IndexError is not null ||
+                                    scope.ExtensionError is not null
                                         ? "error"
                                         : "warning";
-                                findings.Add(new IntegrityFinding(
-                                    severity, "knowledge", problem,
-                                    scope.IsRegistered
-                                        ? repair ? null : "re-run with repair=true"
-                                        : "reload projects; if it persists, check the log for " +
-                                          "'Knowledge scope sync failed'"));
+                                // Without sqlite-vec every repair is withheld — it
+                                // needs the extension — so offering one would send
+                                // the caller round in a circle.
+                                var fix = !scope.IsRegistered
+                                    ? "reload projects; if it persists, check the log for " +
+                                      "'Knowledge scope sync failed'"
+                                    : scope.ExtensionError is not null
+                                        ? "restart Firepit"
+                                        : repair ? null : "re-run with repair=true";
+                                findings.Add(new IntegrityFinding(severity, "knowledge", problem, fix));
                             }
                         }
                     }

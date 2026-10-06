@@ -79,6 +79,7 @@ public sealed class KnowledgeService : IDisposable
     private readonly ModelDownloader _downloader;
     private readonly EmbeddingService _embeddings;
     private readonly KnowledgeSearch _search;
+    private readonly SqliteVecExtension _vec;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Lock _scopesGate = new();
     private readonly Dictionary<string, Scope> _scopes = new(StringComparer.OrdinalIgnoreCase);
@@ -86,6 +87,14 @@ public sealed class KnowledgeService : IDisposable
     private bool _disposed;
 
     public KnowledgeService(string modelDataRoot, ILoggerFactory? loggerFactory = null)
+        : this(modelDataRoot, loggerFactory, vec: null)
+    {
+    }
+
+    /// <param name="vec">The sqlite-vec extension to load. Null caches it
+    /// under <paramref name="modelDataRoot"/>; tests pass one that points
+    /// elsewhere, or nowhere.</param>
+    internal KnowledgeService(string modelDataRoot, ILoggerFactory? loggerFactory, SqliteVecExtension? vec)
     {
         ArgumentException.ThrowIfNullOrEmpty(modelDataRoot);
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
@@ -96,6 +105,21 @@ public sealed class KnowledgeService : IDisposable
             _downloader, _loggerFactory.CreateLogger<EmbeddingService>());
         _search = new KnowledgeSearch(
             _embeddings, _loggerFactory.CreateLogger<KnowledgeSearch>());
+
+        // Loaded and pinned now rather than on the first search. The single-file
+        // exe extracts its natives to %TEMP% at start; copying vec0 out of there
+        // straight away leaves no window in which a temp cleaner can take it.
+        _vec = vec ?? SqliteVecExtension.WithCache(Path.Combine(modelDataRoot, "native"));
+        if (_vec.CheckAvailable() is { } vecError)
+        {
+            _logger.LogError(
+                "Vector search is unavailable — knowledge search falls back to full-text: {Reason}", vecError);
+        }
+        else
+        {
+            _logger.LogInformation("sqlite-vec loaded from {Path}", _vec.LoadedFrom);
+        }
+
         _sweep = new Timer(
             _ => SafetySweep(), null, SafetySweepMs, SafetySweepMs);
     }
@@ -379,6 +403,9 @@ public sealed class KnowledgeService : IDisposable
 
         var all = new List<KnowledgeHit>();
         var degraded = false;
+        string? degradedReason = null;
+        var searched = 0;
+        var failed = 0;
         foreach (var scope in targets)
         {
             try
@@ -386,6 +413,8 @@ public sealed class KnowledgeService : IDisposable
                 var result = await _search.SearchAsync(scope.Store, scope.Name, query, limit, ct);
                 all.AddRange(result.Hits);
                 degraded |= result.Degraded;
+                degradedReason ??= result.DegradedReason;
+                searched++;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -393,11 +422,18 @@ public sealed class KnowledgeService : IDisposable
                 // and must not pass for an empty one either.
                 _logger.LogWarning(ex, "Knowledge search failed for scope {Scope}", scope.Name);
                 warnings.Add($"'{scope.Name}' could not be searched: {ex.Message}");
+                failed++;
             }
         }
 
+        // A base that could not be searched at all is as degraded as an answer
+        // gets. Reporting "not degraded" beside zero hits from two failed bases
+        // was the flag saying the opposite of the warnings next to it.
+        degraded |= failed > 0;
+
         var hits = all.OrderByDescending(h => h.Score).Take(limit).ToList();
-        return new KnowledgeSearchResult(hits, degraded, warnings.Count > 0 ? warnings : null);
+        return new KnowledgeSearchResult(
+            hits, degraded, warnings.Count > 0 ? warnings : null, degradedReason, searched, failed);
     }
 
     /// <summary>
@@ -467,6 +503,14 @@ public sealed class KnowledgeService : IDisposable
         var repairs = new List<string>();
         var docsDir = scope.Store.KnowledgeDir;
 
+        // Asked first and on its own, so the answer cannot be mistaken for a
+        // fault in this scope's index. A missing extension used to surface as
+        // "index unreadable" with a repair recommended — and the repair threw
+        // the index away and failed to build a new one, because the index was
+        // never what was broken. Nothing below that needs the extension runs
+        // without it.
+        var vecError = scope.Store.Vec.CheckAvailable();
+
         var onDisk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (Directory.Exists(docsDir))
         {
@@ -495,9 +539,9 @@ public sealed class KnowledgeService : IDisposable
         catch (Exception ex)
         {
             // A corrupt index is total loss for the scope, and it is derived
-            // data — so the repair is to throw it away and rebuild from the
-            // markdown, which is the truth.
-            if (repair)
+            // data — so the repair is to rebuild it from the markdown, which is
+            // the truth. Not without the extension: the rebuild needs it.
+            if (repair && vecError is null)
             {
                 repairs.Add(await RebuildIndexAsync(scope, ct));
                 try
@@ -508,14 +552,14 @@ public sealed class KnowledgeService : IDisposable
                 {
                     return new ScopeIntegrity(
                         scope.Name, docsDir, scope.Health, onDisk.Count, 0, [.. onDisk.Keys], [], [],
-                        second.Message, repairs);
+                        second.Message, repairs, vecError);
                 }
             }
             else
             {
                 return new ScopeIntegrity(
                     scope.Name, docsDir, scope.Health, onDisk.Count, 0, [.. onDisk.Keys], [], [],
-                    ex.Message, repairs);
+                    ex.Message, repairs, vecError);
             }
         }
 
@@ -527,8 +571,9 @@ public sealed class KnowledgeService : IDisposable
             .Order()
             .ToList();
 
-        if (repair && (missing.Count > 0 || stale.Count > 0 || outOfDate.Count > 0 ||
-                       scope.Health is not ScopeHealth.Ready))
+        if (repair && vecError is null &&
+            (missing.Count > 0 || stale.Count > 0 || outOfDate.Count > 0 ||
+             scope.Health is not ScopeHealth.Ready))
         {
             await ReindexAfterWriteAsync(scope, ct);
             repairs.Add("reindexed");
@@ -563,7 +608,7 @@ public sealed class KnowledgeService : IDisposable
 
         return new ScopeIntegrity(
             scope.Name, docsDir, scope.Health, onDisk.Count, indexed.Count,
-            missing, stale, outOfDate, null, repairs);
+            missing, stale, outOfDate, null, repairs, vecError);
     }
 
     private static Dictionary<string, (string Hash, bool Embedded)> ReadIndexManifest(Scope scope)
@@ -574,7 +619,9 @@ public sealed class KnowledgeService : IDisposable
             return result;
         }
 
-        using var conn = scope.Store.OpenConnection();
+        // The manifest is a plain table, so it can be read with or without
+        // sqlite-vec — whether the extension loads is asked separately.
+        using var conn = scope.Store.OpenForReading(out _);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT path, content_hash, embedded FROM documents";
         using var reader = cmd.ExecuteReader();
@@ -598,20 +645,58 @@ public sealed class KnowledgeService : IDisposable
         }
     }
 
+    /// <summary>
+    /// Builds a fresh index beside the unreadable one and swaps it in only once
+    /// it is complete.
+    /// </summary>
+    /// <remarks>
+    /// It used to delete first and rebuild after. When the rebuild then failed
+    /// — as it did with sqlite-vec missing — the scope was left with a 0-byte
+    /// <c>knowledge.db</c> where the old index had been. The old one now stays
+    /// until there is something better to put in its place.
+    /// </remarks>
     private async Task<string> RebuildIndexAsync(Scope scope, CancellationToken ct)
     {
+        var dbPath = scope.Store.DbPath;
+        var fresh = dbPath + ".rebuild";
         await scope.IndexGate.WaitAsync(ct);
         try
         {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            DeleteDatabaseFiles(fresh);
+            var store = new KnowledgeStore(scope.Store.KnowledgeDir, fresh, scope.Store.Vec);
+            var stats = await new KnowledgeIndexer(store, _embeddings).ReindexAsync(ct);
+            if (!stats.Complete)
             {
-                var path = scope.Store.DbPath + suffix;
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
+                throw new IOException(
+                    $"{stats.Skipped} document(s) could not be read while rebuilding");
             }
+
+            // Fold the new index into a single file before it moves: a WAL
+            // left behind would be paired with the wrong database after the
+            // swap.
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={fresh};Pooling=False"))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "PRAGMA journal_mode=DELETE;";
+                cmd.ExecuteNonQuery();
+            }
+
+            // The old index's WAL goes first — paired with the new file it
+            // would be replayed into it — and the database itself is replaced
+            // in one move, so there is no moment without one.
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            File.Delete(dbPath + "-wal");
+            File.Delete(dbPath + "-shm");
+            File.Move(fresh, dbPath, overwrite: true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Knowledge scope {Scope}: rebuilding the index failed", scope.Name);
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            TryDeleteDatabaseFiles(fresh);
+            return $"could not rebuild the index ({ex.Message}); the old one was left in place";
         }
         finally
         {
@@ -621,7 +706,31 @@ public sealed class KnowledgeService : IDisposable
         scope.Health = ScopeHealth.NeverIndexed;
         scope.IndexedFingerprint = default;
         await ReindexAfterWriteAsync(scope, ct);
-        return "deleted the unreadable index and rebuilt it from the documents";
+        return "rebuilt the unreadable index from the documents";
+    }
+
+    private static void DeleteDatabaseFiles(string dbPath)
+    {
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        {
+            var path = dbPath + suffix;
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
+
+    private static void TryDeleteDatabaseFiles(string dbPath)
+    {
+        try
+        {
+            DeleteDatabaseFiles(dbPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A leftover is deleted before the next rebuild starts.
+        }
     }
 
     /// <summary>Reads one knowledge document. Null when it doesn't exist.</summary>
@@ -779,7 +888,7 @@ public sealed class KnowledgeService : IDisposable
     {
         var projectPath = Path.GetFullPath(reg.ProjectPath);
         var location = reg.Store ?? KnowledgeStoreLocation.For(projectPath);
-        var store = new KnowledgeStore(location.DocsDir, location.IndexPath);
+        var store = new KnowledgeStore(location.DocsDir, location.IndexPath, _vec);
         var scope = new Scope
         {
             Name = reg.Name,

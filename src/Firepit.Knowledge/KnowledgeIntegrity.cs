@@ -17,6 +17,12 @@ namespace Firepit.Knowledge;
 /// In both, but the file's content no longer matches the hash that was indexed.
 /// Searches answer from the old text.
 /// </param>
+/// <param name="ExtensionError">
+/// Why the sqlite-vec extension cannot be loaded, if it cannot. A fault in the
+/// running process, not in this scope's index: kept apart from
+/// <paramref name="IndexError"/> because the two need opposite responses, and
+/// a repair — which rebuilds the index — cannot fix this one.
+/// </param>
 public sealed record ScopeIntegrity(
     string Scope,
     string DocsDir,
@@ -27,7 +33,8 @@ public sealed record ScopeIntegrity(
     IReadOnlyList<string> StaleInIndex,
     IReadOnlyList<string> OutOfDate,
     string? IndexError = null,
-    IReadOnlyList<string>? Repairs = null)
+    IReadOnlyList<string>? Repairs = null,
+    string? ExtensionError = null)
 {
     /// <summary>
     /// False when the caller asked about a scope that is not registered.
@@ -56,6 +63,7 @@ public sealed record ScopeIntegrity(
     public bool Sound =>
         IsRegistered &&
         IndexError is null &&
+        ExtensionError is null &&
         Health is ScopeHealth.Ready &&
         MissingFromIndex.Count == 0 &&
         OutOfDate.Count == 0 &&
@@ -71,6 +79,13 @@ public sealed record ScopeIntegrity(
                 $"no knowledge scope named '{Scope}' is registered, so searches against it " +
                 "return nothing — not because nothing is known, but because nothing is asked",
             ];
+        }
+
+        if (ExtensionError is { } vec)
+        {
+            findings.Add(
+                $"vector search is unavailable in this Firepit process: {vec}. Full-text search " +
+                "still answers. The index is not at fault and a repair cannot help — restart Firepit");
         }
 
         if (IndexError is { } err)

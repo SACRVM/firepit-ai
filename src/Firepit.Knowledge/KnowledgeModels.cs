@@ -10,10 +10,12 @@ public sealed record KnowledgeHit(
     double Score);
 
 /// <summary>
-/// Result of a (possibly multi-scope) search. <see cref="Degraded"/> is true
-/// when the vector side was unavailable in at least one scope and ranking
-/// fell back to FTS-only there.
+/// Result of a (possibly multi-scope) search.
 /// </summary>
+/// <param name="Degraded">
+/// The answer is not the full one: ranking fell back to full-text only in at
+/// least one scope, or a scope could not be searched at all.
+/// </param>
 /// <param name="Warnings">
 /// Everything the caller would otherwise have mistaken for "nothing found".
 /// An empty result and an unsearched base look identical from the outside, and
@@ -21,11 +23,24 @@ public sealed record KnowledgeHit(
 /// scope that could not be searched, was never indexed, or failed its last
 /// pass says so here rather than contributing silence.
 /// </param>
+/// <param name="DegradedReason">
+/// Why ranking fell back to full-text, when it did. A sentence for the caller,
+/// since the two causes need different responses: a model still downloading
+/// resolves itself, a missing extension does not.
+/// </param>
+/// <param name="ScopesSearched">Scopes that answered, with or without vectors.</param>
+/// <param name="ScopesFailed">Scopes that were asked and could not answer.</param>
 public sealed record KnowledgeSearchResult(
     IReadOnlyList<KnowledgeHit> Hits,
     bool Degraded,
-    IReadOnlyList<string>? Warnings = null)
+    IReadOnlyList<string>? Warnings = null,
+    string? DegradedReason = null,
+    int ScopesSearched = 0,
+    int ScopesFailed = 0)
 {
+    /// <summary>Every scope asked failed, so the empty hit list means nothing.</summary>
+    public bool NothingSearched => ScopesFailed > 0 && ScopesSearched == 0;
+
     public bool Trustworthy => Warnings is null || Warnings.Count == 0;
 }
 

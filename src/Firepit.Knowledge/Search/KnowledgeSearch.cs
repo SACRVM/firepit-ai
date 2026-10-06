@@ -41,7 +41,8 @@ public sealed partial class KnowledgeSearch
 
     /// <summary>
     /// Searches one scope. Returns document-level hits (best chunk per doc)
-    /// plus a degraded flag when ranking fell back to FTS-only.
+    /// plus a degraded flag when ranking fell back to FTS-only — the embedding
+    /// model not ready yet, or the sqlite-vec extension not loadable.
     /// </summary>
     public async Task<KnowledgeSearchResult> SearchAsync(
         KnowledgeStore store, string scopeName, string query, int limit, CancellationToken ct = default)
@@ -63,29 +64,42 @@ public sealed partial class KnowledgeSearch
             return new KnowledgeSearchResult([], Degraded: false);
         }
 
-        using var conn = store.OpenConnection();
+        // Opens without sqlite-vec when it cannot be loaded. Failing the whole
+        // search over it turned a lost vector index into a lost knowledge base,
+        // although FTS needs nothing the extension provides.
+        using var conn = store.OpenForReading(out var vectorsUnavailable);
 
         // Run FTS first — it's always available; vector search is optional.
         var ftsHits = RunFts(conn, query, ct);
 
-        List<(string Id, double Distance)> vecHits;
-        bool degraded;
-        try
+        List<(string Id, double Distance)> vecHits = [];
+        string? degradedReason = null;
+        if (vectorsUnavailable is not null)
         {
-            var vec = await _embeddings.EmbedAsync(query, ct);
-            vecHits = RunVector(conn, vec, ct);
-            degraded = false;
+            _logger.LogDebug("sqlite-vec unavailable; falling back to FTS-only ranking: {Reason}", vectorsUnavailable);
+            degradedReason =
+                $"Vector search unavailable — {vectorsUnavailable}. Results are full-text only; " +
+                "restarting Firepit restores semantic search.";
         }
-        catch (EmbeddingUnavailableException ex)
+        else
         {
-            _logger.LogDebug(ex, "Embedding service not ready; falling back to FTS-only ranking");
-            vecHits = [];
-            degraded = true;
+            try
+            {
+                var vec = await _embeddings.EmbedAsync(query, ct);
+                vecHits = RunVector(conn, vec, ct);
+            }
+            catch (EmbeddingUnavailableException ex)
+            {
+                _logger.LogDebug(ex, "Embedding service not ready; falling back to FTS-only ranking");
+                degradedReason =
+                    "Vector search unavailable (embedding model not ready) — results are full-text only.";
+            }
         }
 
+        var degraded = degradedReason is not null;
         var merged = MergeScores(vecHits, ftsHits, degraded).ToList();
         var hits = LoadTopDocuments(conn, scopeName, merged, limit, ct);
-        return new KnowledgeSearchResult(hits, degraded);
+        return new KnowledgeSearchResult(hits, degraded, DegradedReason: degradedReason);
     }
 
     private static List<(string Id, double Bm25)> RunFts(

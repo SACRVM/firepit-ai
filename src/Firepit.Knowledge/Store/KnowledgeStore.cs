@@ -17,15 +17,25 @@ public sealed class KnowledgeStore
     public const string IndexFileName = "knowledge.db";
 
     public KnowledgeStore(string knowledgeDir, string dbPath)
+        : this(knowledgeDir, dbPath, SqliteVecExtension.Default)
+    {
+    }
+
+    public KnowledgeStore(string knowledgeDir, string dbPath, SqliteVecExtension vec)
     {
         ArgumentException.ThrowIfNullOrEmpty(knowledgeDir);
         ArgumentException.ThrowIfNullOrEmpty(dbPath);
+        ArgumentNullException.ThrowIfNull(vec);
         KnowledgeDir = Path.GetFullPath(knowledgeDir);
         DbPath = Path.GetFullPath(dbPath);
+        Vec = vec;
     }
 
     public string KnowledgeDir { get; }
     public string DbPath { get; }
+
+    /// <summary>The sqlite-vec extension this store's connections load.</summary>
+    public SqliteVecExtension Vec { get; }
 
     // Search treats a missing DB file as "empty scope" without creating it —
     // opening a connection would plant a `.firepit/knowledge.db` in repos
@@ -33,14 +43,46 @@ public sealed class KnowledgeStore
     // knowledge dir to exist) and AddDocument create the file.
     public bool IndexExists => File.Exists(DbPath);
 
-    public SqliteConnection OpenConnection()
+    /// <summary>
+    /// A connection with everything loaded, for anything that writes.
+    /// </summary>
+    /// <exception cref="SqliteVecUnavailableException">sqlite-vec could not be
+    /// loaded. Writing without it is not attempted: a chunk rewritten while its
+    /// vector cannot be touched leaves that vector behind under an id the next
+    /// write of the same chunk collides with.</exception>
+    public SqliteConnection OpenConnection() => Open(requireVectors: true, out _);
+
+    /// <summary>
+    /// A connection for reads that can do without vectors — the document
+    /// manifest, full-text search. When sqlite-vec cannot be loaded the
+    /// connection still opens, without it, and
+    /// <paramref name="vectorsUnavailable"/> says why.
+    /// </summary>
+    /// <remarks>
+    /// <c>vec_chunks</c> cannot be queried on such a connection, but every
+    /// other table can: FTS5 is compiled into SQLite, and the rest are plain
+    /// tables. The schema is not touched either — creating <c>vec_chunks</c>
+    /// needs the module.
+    /// </remarks>
+    public SqliteConnection OpenForReading(out string? vectorsUnavailable) =>
+        Open(requireVectors: false, out vectorsUnavailable);
+
+    private SqliteConnection Open(bool requireVectors, out string? vectorsUnavailable)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);
         var conn = new SqliteConnection($"Data Source={DbPath}");
         conn.Open();
         try
         {
-            SqliteVecLoader.LoadInto(conn);
+            vectorsUnavailable = null;
+            try
+            {
+                Vec.LoadInto(conn);
+            }
+            catch (SqliteVecUnavailableException ex) when (!requireVectors)
+            {
+                vectorsUnavailable = ex.Message;
+            }
 
             using (var pragma = conn.CreateCommand())
             {
@@ -50,7 +92,11 @@ public sealed class KnowledgeStore
                 pragma.ExecuteNonQuery();
             }
 
-            EnsureSchema(conn);
+            if (vectorsUnavailable is null)
+            {
+                EnsureSchema(conn);
+            }
+
             return conn;
         }
         catch
