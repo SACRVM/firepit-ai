@@ -5,6 +5,17 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The About dialog stopped opening after Windows Terminal updated.** Its
+  tagline was set in Cascadia Code italic. Windows ships Cascadia Code without
+  an italic, so that face came from Windows Terminal's Store package — and the
+  Store replaces that package while Firepit is running. DirectWrite keeps the
+  font paths it saw at startup, so the first italic drawn after a Terminal
+  update failed with "Unable to find the specified file" in the middle of
+  layout, and clicking the flame did nothing. The tagline is upright now; it
+  was the only italic in Firepit.
+
 ## [0.29.0] — 2026-10-06
 
 ### Added

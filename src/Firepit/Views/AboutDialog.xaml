@@ -77,11 +77,18 @@
                        HorizontalAlignment="Center"
                        Margin="0,18,0,0" />
 
+            <!-- Deliberately not italic. Windows ships Cascadia Code as one
+                 variable file with no italic; a real italic comes only from
+                 Windows Terminal's Store package, and the Store replaces that
+                 package under a running Firepit. DirectWrite keeps the path it
+                 saw at startup, so the first italic rendered after a Terminal
+                 update throws FileNotFoundException mid-layout and the dialog
+                 never opens. Upright faces come from the same variable font
+                 file the main window opened at startup. -->
             <TextBlock Text="Summon your agents."
                        Foreground="#A89F92"
                        FontFamily="Cascadia Code, Consolas, Courier New"
                        FontSize="{DynamicResource BaseFontSize}"
-                       FontStyle="Italic"
                        HorizontalAlignment="Center"
                        Margin="0,4,0,0" />
 
