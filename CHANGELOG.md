@@ -5,6 +5,8 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-10-10
+
 ### Added
 
 - **Copy all in the artifact viewer.** For markdown and text, a button at the
