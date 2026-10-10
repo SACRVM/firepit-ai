@@ -5,6 +5,24 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- **Copy all in the artifact viewer.** For markdown and text, a button at the
+  bottom puts the whole file on the clipboard — the source as written, not the
+  rendered page, since what it gets pasted into is usually an agent or an
+  editor. It says "Copied" for a moment so the click is visibly done, and
+  "Copy failed" when another program is holding the clipboard. Images do not
+  get the button.
+
+### Changed
+
+- **One artifact viewer at a time, and it goes with its tab.** Clicking a
+  second artifact shows it in the viewer that is already open instead of
+  stacking another window on top; the window keeps its size and place.
+  Switching tabs closes it — the pane it was opened from has just changed to
+  another project's artifacts, and a window left behind from the previous one
+  reads as belonging to the new one.
+
 ## [0.29.1] — 2026-10-06
 
 ### Fixed

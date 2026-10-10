@@ -1022,10 +1022,25 @@ public partial class MainWindow : Window
     // and a separate always-visible Inbox toolbar button is the entry point
     // for "process pending messages with Claude".)
 
+    /// <summary>The tab selected at the last SelectionChanged, to tell a real
+    /// switch from a repeat event.</summary>
+    private object? _lastSelectedTab;
+
     private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         // Active tab is part of the persisted layout (ActiveTabProjectName).
         ScheduleStateSave();
+
+        // The artifact viewer belongs to the tab it was opened from, and the
+        // pane it came from now shows another project. Compared against the
+        // last tab rather than closed on every event: SelectionChanged also
+        // fires when nothing changed hands, and that must not shut a viewer
+        // the user just opened.
+        if (!ReferenceEquals(Tabs.SelectedItem, _lastSelectedTab))
+        {
+            _lastSelectedTab = Tabs.SelectedItem;
+            Views.ArtifactViewerWindow.CloseCurrent();
+        }
 
         if (Tabs.SelectedItem is TabItem selected)
         {

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Firepit.Core.Artifacts;
 using Firepit.Web;
 using Serilog;
@@ -23,16 +24,32 @@ namespace Firepit.Views;
 /// </para>
 /// <para>
 /// Not an editor and not a file browser. It renders what it was pointed at,
-/// and the two buttons at the bottom hand the file to something that can do
-/// more.
+/// and the buttons at the bottom copy its text or hand the file to something
+/// that can do more.
+/// </para>
+/// <para>
+/// One at a time, and it belongs to the tab it was opened from. A second click
+/// in the artifact pane shows that artifact in the window already open rather
+/// than stacking another one on top, and switching tabs closes it — the pane
+/// it came from has just changed to another project's artifacts.
 /// </para>
 /// </remarks>
 public partial class ArtifactViewerWindow : Window
 {
-    private readonly ArtifactPreviewView _view = new();
-    private readonly string _absolutePath;
+    private const string CopyLabel = "Copy all";
+    private static readonly TimeSpan CopiedFeedback = TimeSpan.FromSeconds(1.5);
 
-    private ArtifactViewerWindow(ResolvedArtifact artifact)
+    /// <summary>The open viewer, if any. UI thread only.</summary>
+    private static ArtifactViewerWindow? _current;
+
+    private readonly ArtifactPreviewView _view = new();
+    private readonly DispatcherTimer _copyFeedback;
+    private Task? _initialized;
+    private string _absolutePath = string.Empty;
+    private string? _text;
+    private int _renderGeneration;
+
+    private ArtifactViewerWindow()
     {
         InitializeComponent();
 
@@ -51,12 +68,28 @@ public partial class ArtifactViewerWindow : Window
             }
         }
 
-        _absolutePath = artifact.AbsolutePath;
-        CaptionText.Text = artifact.Label;
-        Title = artifact.Label;
         ViewerHost.Child = _view.Element;
-        Closed += (_, _) => _view.Dispose();
+
+        _copyFeedback = new DispatcherTimer { Interval = CopiedFeedback };
+        _copyFeedback.Tick += (_, _) =>
+        {
+            _copyFeedback.Stop();
+            CopyButton.Content = CopyLabel;
+        };
+
+        Closed += (_, _) =>
+        {
+            _copyFeedback.Stop();
+            if (ReferenceEquals(_current, this))
+            {
+                _current = null;
+            }
+            _view.Dispose();
+        };
     }
+
+    /// <summary>Close the open viewer, if there is one.</summary>
+    public static void CloseCurrent() => _current?.Close();
 
     /// <summary>
     /// Open a viewer for <paramref name="artifact"/>, or return false if this
@@ -96,24 +129,66 @@ public partial class ArtifactViewerWindow : Window
             return false;
         }
 
-        var window = new ArtifactViewerWindow(artifact) { Owner = owner };
-        DialogSizing.ClampToScreen(window);
-        window.Show();
+        // Reused, not replaced: the window keeps the size and place the user
+        // gave it, and the WebView2 behind it is already warm.
+        var window = _current;
+        if (window is null)
+        {
+            window = new ArtifactViewerWindow { Owner = owner };
+            DialogSizing.ClampToScreen(window);
+            window.Show();
+            _current = window;
+        }
+        else
+        {
+            if (window.WindowState == WindowState.Minimized)
+            {
+                window.WindowState = WindowState.Normal;
+            }
+            window.Activate();
+        }
+
+        window.Load(artifact, text, directory);
+        return true;
+    }
+
+    private void Load(ResolvedArtifact artifact, string? text, string directory)
+    {
+        _absolutePath = artifact.AbsolutePath;
+        _text = text;
+        CaptionText.Text = artifact.Label;
+        Title = artifact.Label;
+
+        // Text and markdown only: an image has no text to put on the
+        // clipboard, and a button that copies nothing is a lie.
+        CopyButton.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        _copyFeedback.Stop();
+        CopyButton.Content = CopyLabel;
 
         // After Show: the WebView2 needs a live window to attach its hwnd to,
         // and the render is awaited on the UI thread so a failure lands in the
         // window the user is already looking at rather than nowhere.
-        _ = window.RenderAsync(
+        _ = RenderAsync(
             ArtifactPreview.Build(artifact.Kind, Path.GetFileName(artifact.AbsolutePath), text),
             directory);
-        return true;
     }
 
     private async Task RenderAsync(string html, string directory)
     {
+        var generation = ++_renderGeneration;
         try
         {
-            await _view.InitializeAsync(CancellationToken.None);
+            // Once per window: initialising a WebView2 a second time registers
+            // its handlers and host mapping twice.
+            _initialized ??= _view.InitializeAsync(CancellationToken.None);
+            await _initialized;
+
+            // A second artifact clicked while the first was still starting up
+            // has the last word.
+            if (generation != _renderGeneration)
+            {
+                return;
+            }
             await _view.ShowAsync(html, directory);
         }
         catch (Exception ex)
@@ -135,6 +210,34 @@ public partial class ArtifactViewerWindow : Window
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+
+    /// <summary>
+    /// The file's text as it was read — for markdown that is the source, not
+    /// the rendered page, which is what pasting into an agent or an editor
+    /// wants.
+    /// </summary>
+    private void OnCopyAllClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_text))
+        {
+            return;
+        }
+        try
+        {
+            Clipboard.SetText(_text);
+            CopyButton.Content = "Copied";
+        }
+        catch (Exception ex)
+        {
+            // Another process holding the clipboard open is the usual cause,
+            // and it is transient. Saying so beats a button that silently did
+            // nothing.
+            Log.Warning(ex, "Could not copy artifact text to the clipboard");
+            CopyButton.Content = "Copy failed";
+        }
+        _copyFeedback.Stop();
+        _copyFeedback.Start();
+    }
 
     private void OnOpenExternallyClick(object sender, RoutedEventArgs e) =>
         Launch(new ProcessStartInfo(_absolutePath) { UseShellExecute = true }, "open");

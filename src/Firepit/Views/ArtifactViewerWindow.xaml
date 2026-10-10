@@ -86,10 +86,15 @@
              its type belongs to Firepit.Web and must not appear out here. -->
         <Border Grid.Row="1" x:Name="ViewerHost" Background="#15110D" />
 
-        <!-- The two ways out of the viewer, for the cases it cannot serve:
-             an editor, or the folder the file sits in. -->
+        <!-- Copy the text, or the two ways out of the viewer for the cases it
+             cannot serve: an editor, or the folder the file sits in. -->
         <Border Grid.Row="2" Background="#120E0A" BorderBrush="#241D16" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="8,5">
+                <Button x:Name="CopyButton"
+                        Style="{StaticResource ViewerButton}"
+                        Content="Copy all"
+                        ToolTip="Copy the whole text to the clipboard"
+                        Click="OnCopyAllClick" />
                 <Button Style="{StaticResource ViewerButton}"
                         Content="Show in Explorer"
                         Click="OnRevealClick" />
