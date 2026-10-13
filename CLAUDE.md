@@ -2,6 +2,19 @@
 
 Project guidance for Claude Code sessions working on Firepit. This file is the operational brief — what to build, what not to build, and which lines must not be crossed.
 
+## Status (2026-10): Linux-first
+
+`main` targets Linux (CachyOS, KDE Plasma, Wayland). The WPF shell is frozen
+at v0.30.0 on the `windows-legacy` branch; `src/Firepit` and `src/Firepit.Web`
+are out of `Firepit.slnx` and are being taken apart. **The working plan is
+`docs/LINUX.md`**, not `ROADMAP.md`: Claude Code desktop is the UI, Firepit is
+the platform behind it (MCP) plus the `firepit-commands` mod.
+
+Build and test with `dotnet build Firepit.slnx` and `dotnet test Firepit.slnx`.
+`run.ps1`, `/run` and `/release` are Windows-only and do not apply on `main`.
+Where this file still says Windows, WPF, ConPTY or `%APPDATA%`, read it as
+history until the docs are rewritten.
+
 ## Git workflow (durable authorization)
 
 This is a single-developer repo. The following git operations are **authorized in advance** for the Claude Code agent — no per-action confirmation needed:
