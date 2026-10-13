@@ -41,7 +41,18 @@ public class McpHealthCheckerTests
         Assert.Equal(McpHealthIssueKind.CommandNotFound, issues[0].Kind);
     }
 
-    [Fact]
+    [UnixFact]
+    public void Check_ResolvesBareCommandOnThePath()
+    {
+        var checker = new McpHealthChecker(
+            readPath:    () => "/usr/local/bin:/home/u/.local/bin",
+            readPathExt: () => null,
+            fileExists:  p => p == "/home/u/.local/bin/firepit-mcp");
+
+        Assert.Empty(checker.Check([Stdio("firepit", "firepit-mcp")]));
+    }
+
+    [WindowsFact]
     public void Check_ResolvesBareCommandViaPathExt()
     {
         var resolvable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

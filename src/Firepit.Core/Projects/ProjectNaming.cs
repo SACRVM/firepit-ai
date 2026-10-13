@@ -8,11 +8,12 @@ namespace Firepit.Core.Projects;
 public static class ProjectNaming
 {
     /// <summary>
-    /// The last path segment, e.g. <c>C:\repos\foo</c> → <c>foo</c>.
+    /// The last path segment, e.g. <c>C:\repos\foo</c> → <c>foo</c>,
+    /// <c>/home/u/foo</c> → <c>foo</c>. Split on both separators by hand:
     /// <see cref="Path.GetFileName(string)"/> returns EMPTY for a UNC share
-    /// root (<c>\\server\share</c>) and drive roots — .NET treats them as roots
-    /// — which left network-directory projects with a blank tab. Fall back to
-    /// the last non-empty segment so <c>\\nas\music</c> → <c>music</c>.
+    /// root (<c>\\server\share</c>) and drive roots, and on Linux it does not
+    /// see a backslash as a separator at all — a path recorded on Windows
+    /// would come back whole.
     /// </summary>
     public static string DeriveName(string? path)
     {
@@ -22,15 +23,7 @@ public static class ProjectNaming
         }
 
         var trimmed = path.TrimEnd('\\', '/');
-        var name = Path.GetFileName(trimmed);
-        if (!string.IsNullOrEmpty(name))
-        {
-            return name;
-        }
-
-        // UNC share root / drive root — GetFileName is empty. Take the last
-        // segment: \\nas\music → "music", \\nas → "nas".
-        var segments = trimmed.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var segments = trimmed.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
         return segments.Length > 0 ? segments[^1] : trimmed;
     }
 }

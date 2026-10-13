@@ -114,11 +114,34 @@ public static class FirepitPaths
         _initialized = true;
     }
 
-    /// <summary>Roaming data root — settings live here.</summary>
+    /// <summary>
+    /// Roaming data root — settings live here. <c>%APPDATA%\Firepit</c> on
+    /// Windows, <c>$XDG_CONFIG_HOME/firepit</c> (<c>~/.config/firepit</c>) elsewhere.
+    /// </summary>
     public static string Roaming => Root(Environment.SpecialFolder.ApplicationData);
 
-    /// <summary>Local data root — state, logs, indexes, browser profile.</summary>
+    /// <summary>
+    /// Local data root — state, logs, indexes. <c>%LOCALAPPDATA%\Firepit</c> on
+    /// Windows, <c>$XDG_DATA_HOME/firepit</c> (<c>~/.local/share/firepit</c>) elsewhere.
+    /// </summary>
     public static string Local => Root(Environment.SpecialFolder.LocalApplicationData);
+
+    /// <summary>
+    /// Where this instance's sockets live: <c>$XDG_RUNTIME_DIR/firepit</c>,
+    /// private to the user and emptied at logout. Falls back to a per-user
+    /// folder under the temp directory where no runtime dir is set.
+    /// </summary>
+    public static string Runtime
+    {
+        get
+        {
+            var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+            var parent = !string.IsNullOrEmpty(runtime) && Path.IsPathRooted(runtime)
+                ? runtime
+                : Path.Combine(Path.GetTempPath(), $"firepit-{Environment.UserName}");
+            return Path.Combine(parent, DataFolderNameFor(InstanceName));
+        }
+    }
 
     /// <summary>
     /// The singleton pipe this instance answers to. Named instances get their
@@ -163,8 +186,19 @@ public static class FirepitPaths
     /// <summary>The installed instance's roaming root, whatever this one is.</summary>
     public static string DefaultRoaming =>
         Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), ProductFolder);
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), DataFolderNameFor(null));
+
+    /// <summary>
+    /// The data folder's name on this OS: <see cref="FolderNameFor"/> on
+    /// Windows, lowercase elsewhere, as XDG directories are by convention.
+    /// .NET already maps the special folders onto <c>XDG_CONFIG_HOME</c> and
+    /// <c>XDG_DATA_HOME</c> there.
+    /// </summary>
+    public static string DataFolderNameFor(string? instanceName) =>
+        OperatingSystem.IsWindows()
+            ? FolderNameFor(instanceName)
+            : FolderNameFor(instanceName).ToLowerInvariant();
 
     private static string Root(Environment.SpecialFolder folder) =>
-        Path.Combine(Environment.GetFolderPath(folder), FolderNameFor(InstanceName));
+        Path.Combine(Environment.GetFolderPath(folder), DataFolderNameFor(InstanceName));
 }

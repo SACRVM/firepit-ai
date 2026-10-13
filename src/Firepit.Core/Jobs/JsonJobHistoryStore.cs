@@ -22,6 +22,8 @@ namespace Firepit.Core.Jobs;
 /// </summary>
 public sealed class JsonJobHistoryStore : IJobHistoryStore
 {
+    private const string PortableInvalid = "\"<>|:*?\\/";
+
     public const string RunsDirectory = "runs";
     private static readonly TimeSpan DefaultRetention = TimeSpan.FromDays(30);
 
@@ -237,11 +239,12 @@ public sealed class JsonJobHistoryStore : IJobHistoryStore
     /// <summary>
     /// Job names go straight into a directory path. Strip characters that
     /// would explode on Windows; leave dashes / underscores / dots alone.
+    /// The Windows set on every OS: Linux forbids only '/' and NUL, and a run
+    /// folder named "with:colon" would not survive a checkout on Windows.
     /// </summary>
     public static string SanitizeJobName(string jobName)
     {
-        var invalid = Path.GetInvalidFileNameChars();
-        var clean = string.Concat(jobName.Select(ch => Array.IndexOf(invalid, ch) >= 0 ? '_' : ch));
+        var clean = string.Concat(jobName.Select(ch => ch < 32 || PortableInvalid.Contains(ch) ? '_' : ch));
         return clean.Length == 0 ? "_" : clean;
     }
 }

@@ -5,6 +5,47 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- **main is Linux-first.** v0.30.0 is the last Windows release; the WPF
+  shell, the WebView2 terminal and the Inno installer stay on the
+  `windows-legacy` branch. On `main` they are out of the solution, CI runs on
+  ubuntu-latest, and the plan for what comes next is `docs/LINUX.md`:
+  Claude Code desktop as the UI, Firepit as the platform behind it.
+- **The libraries build and pass on Linux.** Core, Adapters, Knowledge,
+  Process and the MCP host target plain `net10.0`; 512 tests pass, four facts
+  about Windows behaviour run only there.
+- **Data follows XDG off Windows**: settings in `~/.config/firepit`, state,
+  logs and indexes in `~/.local/share/firepit`, sockets in
+  `$XDG_RUNTIME_DIR/firepit`. Windows paths are unchanged.
+
+### Fixed
+
+- **Knowledge pointers written on Windows resolve everywhere.** 21 of 22
+  pointer files say `..\..\.firepit\projects\…`; on Linux a backslash is a
+  filename character, so every redirected scope pointed at one oddly named
+  directory. Either separator is read now; Firepit already writes `/`.
+- **Vector search loads on Linux and macOS.** The sqlite-vec file was looked
+  up as `vec0.dll` everywhere, so search fell back to full-text alone without
+  a word. It is `vec0.so` / `vec0.dylib` there, found under the portable RID
+  even when a distro-built runtime reports its own (`arch-x64`).
+- **Paths compare case-sensitively where the file system does.** Project
+  paths, document paths, job keys and the shell-command trust ledger compared
+  case-insensitively everywhere; on Linux `/x/Foo` and `/x/foo` are two
+  projects, and they shared trust.
+- **A finished pseudo-terminal is the end of the stream, not an error.** On
+  Linux reading a PTY whose child exited fails with EIO; that surfaced as an
+  exception on dispose.
+- **Artifacts pinned on Windows still resolve.** A relative `docs\report.md`
+  means `docs/report.md`; an absolute `D:\…` shows as missing instead of being
+  glued under the project root.
+- **Job names make portable folder names** on every OS, not only on Windows.
+
+### Added
+
+- **`${cred:…}` on Linux** resolves from the Secret Service (KWallet,
+  GNOME Keyring) through `secret-tool`, under `service=firepit target=<target>`.
+
 ## [0.30.0] — 2026-10-10
 
 ### Added

@@ -28,7 +28,7 @@ public sealed class NonBlockingFileTests : IDisposable
         try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
     }
 
-    [Fact]
+    [WindowsFact]
     public void TheDefaultRead_BlocksAWriter()
     {
         // Documents the bug rather than the fix: this is what File.ReadAllBytes

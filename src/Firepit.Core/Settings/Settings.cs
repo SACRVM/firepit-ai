@@ -17,9 +17,9 @@ public sealed record FirepitSettings(
     UpdateSettings? Updates = null)
 {
     public static readonly FirepitSettings Defaults = new(
-        ProjectsRoot: Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "SynologyDrive", "PROJECTS"),
+        ProjectsRoot: OperatingSystem.IsWindows()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "SynologyDrive", "PROJECTS")
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Projects", "repos"),
         DefaultAgent: "claude",
         Theme: "dark",
         Tabs: TabSettings.Defaults,
@@ -137,14 +137,17 @@ public sealed record TabSettings(
 
 /// <summary>
 /// External program preferences. <see cref="Preferred"/> picks the external
-/// shell (<c>wt</c> → Windows Terminal, PowerShell fallback).
+/// shell (<c>wt</c> → Windows Terminal with a PowerShell fallback on Windows,
+/// <c>konsole</c> elsewhere).
 /// <see cref="Editor"/> is what the toolbar's Editor button runs with the
 /// project path as its argument — any editor CLI works (<c>code</c>,
 /// <c>subl</c>, <c>devenv</c>, or a full exe path); default is VS Code's shim.
 /// </summary>
 public sealed record ShellsSettings(string Preferred, string Editor = "code")
 {
-    public static readonly ShellsSettings Defaults = new(Preferred: "wt", Editor: "code");
+    public static readonly ShellsSettings Defaults = new(
+        Preferred: OperatingSystem.IsWindows() ? "wt" : "konsole",
+        Editor: "code");
 }
 
 /// <summary>

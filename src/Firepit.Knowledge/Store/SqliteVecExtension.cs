@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 namespace Firepit.Knowledge.Store;
 
 /// <summary>
-/// The sqlite-vec extension (<c>vec0.dll</c>): where its file is, and keeping
+/// The sqlite-vec extension (<c>vec0.dll</c>, <c>vec0.so</c>, <c>vec0.dylib</c>): where its file is, and keeping
 /// it there for as long as the process runs.
 /// </summary>
 /// <remarks>
@@ -43,7 +43,11 @@ namespace Firepit.Knowledge.Store;
 /// </remarks>
 public sealed class SqliteVecExtension
 {
-    public const string FileName = "vec0.dll";
+    /// <summary>The extension's file name on this OS, as the NuGet package ships it.</summary>
+    public static string FileName { get; } =
+        OperatingSystem.IsWindows() ? "vec0.dll"
+        : OperatingSystem.IsMacOS() ? "vec0.dylib"
+        : "vec0.so";
 
     private readonly Lock _gate = new();
     private readonly string? _sourceOverride;
@@ -243,6 +247,10 @@ public sealed class SqliteVecExtension
         dirs.Add(Path.Combine(
             AppContext.BaseDirectory, "runtimes", RuntimeInformation.RuntimeIdentifier, "native"));
 
+        // A distro-built runtime reports its own RID (arch-x64 on Arch), but
+        // the package ships under the portable one (linux-x64).
+        dirs.Add(Path.Combine(AppContext.BaseDirectory, "runtimes", PortableRid(), "native"));
+
         foreach (var dir in dirs)
         {
             var candidate = Path.Combine(dir, FileName);
@@ -294,7 +302,14 @@ public sealed class SqliteVecExtension
     private static bool IsUnder(string dir, string path)
     {
         var root = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        return Path.GetFullPath(path).StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        return Path.GetFullPath(path).StartsWith(root, PathText.Comparison);
+    }
+
+    private static string PortableRid()
+    {
+        var os = OperatingSystem.IsWindows() ? "win" : OperatingSystem.IsMacOS() ? "osx" : "linux";
+        var arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        return $"{os}-{arch}";
     }
 }
 

@@ -54,7 +54,7 @@ public sealed class KnowledgeIndexer
         var pending = 0;
         var skipped = 0;
         var embeddingsAvailable = true;
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(PathText.Comparer);
 
         foreach (var file in files)
         {
@@ -155,7 +155,7 @@ public sealed class KnowledgeIndexer
 
     private static Dictionary<string, (string Hash, bool Embedded)> ReadManifest(SqliteConnection conn)
     {
-        var result = new Dictionary<string, (string, bool)>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, (string, bool)>(PathText.Comparer);
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT path, content_hash, embedded FROM documents";
         using var reader = cmd.ExecuteReader();

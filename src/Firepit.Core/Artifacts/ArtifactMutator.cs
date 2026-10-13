@@ -110,5 +110,5 @@ public static class ArtifactMutator
         string.Equals(
             ArtifactResolver.ToAbsolute(storedPath, projectPath),
             targetAbsolute,
-            StringComparison.OrdinalIgnoreCase);
+            PlatformText.Paths);
 }

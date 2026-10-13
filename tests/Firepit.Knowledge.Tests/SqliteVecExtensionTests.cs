@@ -88,8 +88,12 @@ public sealed class SqliteVecExtensionTests : IDisposable
         File.Delete(extracted);
 
         // The copy in use is pinned for the life of the process, and Windows
-        // will not delete a file mapped as an image.
-        Assert.ThrowsAny<UnauthorizedAccessException>(() => File.Delete(vec.LoadedFrom!));
+        // will not delete a file mapped as an image. (Unix would unlink it and
+        // keep the mapping, so there is nothing to assert there.)
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.ThrowsAny<UnauthorizedAccessException>(() => File.Delete(vec.LoadedFrom!));
+        }
 
         var second = await SearchAsync(store);
         Assert.False(second.Degraded, second.DegradedReason);

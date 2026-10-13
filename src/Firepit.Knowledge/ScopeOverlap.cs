@@ -52,7 +52,7 @@ public static class ScopeOverlaps
     }
 
     public static bool SameDirectory(string a, string b) =>
-        string.Equals(Normalise(a), Normalise(b), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Normalise(a), Normalise(b), PathText.Comparison);
 
     /// <summary>True when <paramref name="candidate"/> is strictly below <paramref name="parent"/>.</summary>
     public static bool IsUnder(string parent, string candidate)
@@ -60,9 +60,16 @@ public static class ScopeOverlaps
         var p = Normalise(parent);
         var c = Normalise(candidate);
 
+        // An unusable path is under nothing and contains nothing. Without this
+        // the empty string became "/" below, the parent of every Unix path.
+        if (p.Length == 0 || c.Length == 0)
+        {
+            return false;
+        }
+
         // Strictly below. A drive or share root is its own prefix, so the
         // prefix test alone would call it its own parent.
-        if (string.Equals(p, c, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(p, c, PathText.Comparison))
         {
             return false;
         }
@@ -74,11 +81,18 @@ public static class ScopeOverlaps
             p += Path.DirectorySeparatorChar;
         }
 
-        return c.StartsWith(p, StringComparison.OrdinalIgnoreCase);
+        return c.StartsWith(p, PathText.Comparison);
     }
 
     private static string Normalise(string path)
     {
+        // A NUL is invalid in a path on every OS, but only Windows' GetFullPath
+        // says so; Unix would happily root it under the working directory.
+        if (path.Contains('\0'))
+        {
+            return string.Empty;
+        }
+
         try
         {
             return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));

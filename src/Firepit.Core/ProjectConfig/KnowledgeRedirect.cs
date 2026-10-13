@@ -43,5 +43,5 @@ public static class KnowledgeRedirect
     /// </summary>
     public static bool IsInsideKnowledgeDir(string relativePath) =>
         relativePath.Replace('\\', '/')
-            .StartsWith(KnowledgePath + "/", StringComparison.OrdinalIgnoreCase);
+            .StartsWith(KnowledgePath + "/", PlatformText.Paths);
 }

@@ -15,7 +15,7 @@ public sealed class ClaudeHistoryKeyTests
         Assert.Equal(expected, ClaudeHistoryKey.Encode(path));
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetHistoryDir_ComposesUnderDotClaudeProjects()
     {
         var dir = ClaudeHistoryKey.GetHistoryDir(@"C:\Users\jane", @"D:\repos\firepit-ai");
@@ -23,11 +23,19 @@ public sealed class ClaudeHistoryKeyTests
         Assert.Equal(@"C:\Users\jane\.claude\projects\D--repos-firepit-ai", dir);
     }
 
-    [Fact]
+    [WindowsFact]
     public void GetHistoryDir_NormalisesRelativeSegments()
     {
         var dir = ClaudeHistoryKey.GetHistoryDir(@"C:\Users\jane", @"D:\repos\sub\..\firepit-ai");
 
         Assert.EndsWith(@"\D--repos-firepit-ai", dir, StringComparison.Ordinal);
+    }
+
+    [UnixFact]
+    public void GetHistoryDir_OnUnix_MatchesClaudeCodesKey()
+    {
+        var dir = ClaudeHistoryKey.GetHistoryDir("/home/jane", "/home/jane/repos/sub/../firepit-ai");
+
+        Assert.Equal("/home/jane/.claude/projects/-home-jane-repos-firepit-ai", dir);
     }
 }

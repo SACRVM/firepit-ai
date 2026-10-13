@@ -52,7 +52,7 @@ public sealed class CommandsTrustLedger
     {
         var state = _stateStore.Load();
         return state.TrustedCommands?.Any(t =>
-            string.Equals(t.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(t.ProjectPath, projectPath, PlatformText.Paths) &&
             string.Equals(t.ConfigSha256, hash, StringComparison.OrdinalIgnoreCase)) ?? false;
     }
 
@@ -65,7 +65,7 @@ public sealed class CommandsTrustLedger
     {
         var state = _stateStore.Load();
         var kept = (state.TrustedCommands ?? [])
-            .Where(t => !string.Equals(t.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            .Where(t => !string.Equals(t.ProjectPath, projectPath, PlatformText.Paths))
             .ToList();
         kept.Add(new TrustedProjectCommands(projectPath, hash));
         _stateStore.Save(state with { TrustedCommands = kept });
@@ -80,7 +80,7 @@ public sealed class CommandsTrustLedger
         var state = _stateStore.Load();
         if (state.TrustedCommands is null) return;
         var kept = state.TrustedCommands
-            .Where(t => !string.Equals(t.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase))
+            .Where(t => !string.Equals(t.ProjectPath, projectPath, PlatformText.Paths))
             .ToList();
         if (kept.Count != state.TrustedCommands.Count)
         {

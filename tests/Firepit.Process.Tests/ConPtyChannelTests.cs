@@ -7,14 +7,22 @@ namespace Firepit.Process.Tests;
 public class ConPtyChannelTests
 {
     [Fact]
-    public async Task Cmd_EchoCommand_ProducesExpectedOutput()
+    public async Task Shell_EchoCommand_ProducesExpectedOutput()
     {
-        await using var channel = await ConPtyLauncher.SpawnAsync(
-            executable: "cmd.exe",
-            arguments: ["/c", "echo hi"],
-            workingDirectory: Environment.SystemDirectory,
-            environmentOverrides: null,
-            initialSize: TerminalSize.Default);
+        // A real pseudo-terminal on both: ConPTY on Windows, forkpty elsewhere.
+        await using var channel = OperatingSystem.IsWindows()
+            ? await ConPtyLauncher.SpawnAsync(
+                executable: "cmd.exe",
+                arguments: ["/c", "echo hi"],
+                workingDirectory: Environment.SystemDirectory,
+                environmentOverrides: null,
+                initialSize: TerminalSize.Default)
+            : await ConPtyLauncher.SpawnAsync(
+                executable: "/bin/sh",
+                arguments: ["-c", "echo hi"],
+                workingDirectory: Path.GetTempPath(),
+                environmentOverrides: null,
+                initialSize: TerminalSize.Default);
 
         Assert.True(channel.Pid > 0);
 

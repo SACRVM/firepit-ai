@@ -74,7 +74,7 @@ public sealed class JobScheduler : IAsyncDisposable
     public void InvalidateProject(string projectPath)
     {
         if (string.IsNullOrEmpty(projectPath)) return;
-        var prefix = projectPath.ToLowerInvariant() + "||";
+        var prefix = PlatformText.PathKey(projectPath) + "||";
         var stale  = _states.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
         foreach (var key in stale)
         {
@@ -104,7 +104,7 @@ public sealed class JobScheduler : IAsyncDisposable
     public Task TriggerNowAsync(string projectPath, string jobName, CancellationToken ct)
     {
         var entry = _source.Enumerate()
-            .FirstOrDefault(e => string.Equals(e.ProjectPath, projectPath, StringComparison.OrdinalIgnoreCase) &&
+            .FirstOrDefault(e => string.Equals(e.ProjectPath, projectPath, PlatformText.Paths) &&
                                  string.Equals(e.Job.Name, jobName, StringComparison.Ordinal));
         if (entry is null) throw new InvalidOperationException($"unknown job '{jobName}' in {projectPath}");
         return DispatchAsync(entry, JobTrigger.Manual, ct);
@@ -373,7 +373,7 @@ public sealed class JobScheduler : IAsyncDisposable
         SkipPermissions: entry.Job.SkipPermissions ?? false);
 
     private static string KeyOf(JobScheduleEntry entry) =>
-        $"{entry.ProjectPath.ToLowerInvariant()}||{entry.Job.Name}";
+        $"{PlatformText.PathKey(entry.ProjectPath)}||{entry.Job.Name}";
 
     public async ValueTask DisposeAsync()
     {

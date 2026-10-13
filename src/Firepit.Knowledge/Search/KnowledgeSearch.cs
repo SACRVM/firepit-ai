@@ -234,7 +234,7 @@ public sealed partial class KnowledgeSearch
         CancellationToken ct)
     {
         var hits = new List<KnowledgeHit>(limit);
-        var seenDocs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenDocs = new HashSet<string>(PathText.Comparer);
 
         foreach (var (chunkId, score) in merged)
         {

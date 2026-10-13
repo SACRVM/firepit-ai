@@ -25,7 +25,7 @@ public sealed class ProjectDiscovery : IProjectDiscovery
         var manual = manualEntries?.ToArray() ?? [];
         var manualPaths = new HashSet<string>(
             manual.Select(p => Path.GetFullPath(p.Path)),
-            StringComparer.OrdinalIgnoreCase);
+            PlatformText.PathComparer);
 
         var discovered = new List<Project>();
         if (Directory.Exists(projectsRoot))

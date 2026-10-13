@@ -81,13 +81,18 @@ public static class KnowledgeLocator
         // Relative to the .firepit directory holding the pointer, so moving
         // the whole repos tree keeps every pointer valid.
         //
+        // Either separator: pointers written on Windows say "..\..\x". '\' is
+        // a legal filename character elsewhere, so read literally it names one
+        // oddly-named directory instead of a path. Firepit writes '/', which
+        // Windows accepts too.
+        //
         // Trimmed: GetFullPath preserves a trailing separator, and a hand-typed
         // "../shared/knowledge/" would then produce a docs dir that fails every
         // `StartsWith(dir + separator)` test in the service — no document
         // resolvable by path, every watcher event discarded, and an index file
         // named ".db" inside the committed directory. All of it silent.
         var resolved = Path.TrimEndingDirectorySeparator(
-            Path.GetFullPath(Path.Combine(firepitDir, target)));
+            Path.GetFullPath(Path.Combine(firepitDir, target.Replace('\\', '/'))));
 
         if (File.Exists(resolved))
         {
@@ -129,8 +134,8 @@ public static class KnowledgeLocator
     {
         var c = Path.TrimEndingDirectorySeparator(candidate);
         var i = Path.TrimEndingDirectorySeparator(inner);
-        return string.Equals(c, i, StringComparison.OrdinalIgnoreCase) ||
-               i.StartsWith(c + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(c, i, PathText.Comparison) ||
+               i.StartsWith(c + Path.DirectorySeparatorChar, PathText.Comparison);
     }
 
     private static string? FirstMeaningfulLine(string content)

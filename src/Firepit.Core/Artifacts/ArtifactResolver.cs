@@ -90,11 +90,25 @@ public static class ArtifactResolver
     /// project-root-relative. Malformed paths are returned unchanged rather
     /// than throwing — the caller renders them as missing.
     /// </summary>
+    /// <remarks>
+    /// artifacts.json files written on Windows travel with their repos. On
+    /// Linux a relative <c>docs\report.md</c> means <c>docs/report.md</c>, and an
+    /// absolute <c>D:\out\x.exe</c> is returned as written so it shows as
+    /// missing instead of being glued under the project root.
+    /// </remarks>
     public static string ToAbsolute(string path, string projectPath)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
             return string.Empty;
+        }
+        if (!OperatingSystem.IsWindows())
+        {
+            if (IsWindowsAbsolute(path))
+            {
+                return path;
+            }
+            path = path.Replace('\\', '/');
         }
         try
         {
@@ -107,15 +121,16 @@ public static class ArtifactResolver
         catch (PathTooLongException)  { return path; }
     }
 
+    private static bool IsWindowsAbsolute(string path) =>
+        path.StartsWith(@"\\", StringComparison.Ordinal) ||
+        (path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/');
+
     private static string FileNameOf(string absolute)
     {
-        try
-        {
-            var name = System.IO.Path.GetFileName(absolute.TrimEnd(
-                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-            return string.IsNullOrEmpty(name) ? absolute : name;
-        }
-        catch (ArgumentException) { return absolute; }
+        // Either separator: a Windows path kept as written on Linux still
+        // gets its file name as the label.
+        var name = Projects.ProjectNaming.DeriveName(absolute);
+        return string.IsNullOrEmpty(name) ? absolute : name;
     }
 
     private static bool Exists(string absolute)

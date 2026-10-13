@@ -110,6 +110,13 @@ public sealed class ConPtyChannel : IPtyChannel
                 {
                     break;
                 }
+                catch (IOException) when (!OperatingSystem.IsWindows())
+                {
+                    // On Linux, reading the master side of a pseudo-terminal
+                    // whose child has exited fails with EIO instead of
+                    // returning 0. That is the end of the stream, not an error.
+                    break;
+                }
 
                 if (read <= 0)
                 {

@@ -5,11 +5,11 @@ using Firepit.Process;
 namespace Firepit.Process.Tests;
 
 /// <summary>
-/// End-to-end runner tests use <c>cmd.exe</c> as a deterministic stand-in for
-/// the real <c>claude</c> binary. Each test writes a tiny .bat file that
-/// prints exactly the bytes the test wants on stdout/stderr and exits with
-/// the desired code, so the runner can be verified without depending on a
-/// Claude install or hitting the network.
+/// End-to-end runner tests use a script as a deterministic stand-in for the
+/// real <c>claude</c> binary: a .bat file on Windows, a /bin/sh script
+/// elsewhere. Each prints exactly the bytes the test wants on stdout/stderr
+/// and exits with the desired code, so the runner can be verified without
+/// depending on a Claude install or hitting the network.
 /// </summary>
 public class ProcessJobRunnerTests : IDisposable
 {
@@ -26,12 +26,20 @@ public class ProcessJobRunnerTests : IDisposable
         try { Directory.Delete(_projectPath, recursive: true); } catch { /* best effort */ }
     }
 
-    private string WriteFakeClaude(string batchBody)
+    private string WriteFakeClaude(string batchBody, string shBody)
     {
-        var path = Path.Combine(_projectPath, "fake-claude.bat");
-        // ConPty's friends use Encoding.Default; .bat needs the active code page.
-        File.WriteAllText(path, "@echo off\r\n" + batchBody + "\r\n");
-        return path;
+        if (OperatingSystem.IsWindows())
+        {
+            var bat = Path.Combine(_projectPath, "fake-claude.bat");
+            // ConPty's friends use Encoding.Default; .bat needs the active code page.
+            File.WriteAllText(bat, "@echo off\r\n" + batchBody + "\r\n");
+            return bat;
+        }
+
+        var sh = Path.Combine(_projectPath, "fake-claude.sh");
+        File.WriteAllText(sh, "#!/bin/sh\n" + shBody + "\n");
+        File.SetUnixFileMode(sh, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        return sh;
     }
 
     private JobRunRequest MakeRequest(string fakeClaudePath) =>
@@ -50,6 +58,9 @@ public class ProcessJobRunnerTests : IDisposable
         var fake = WriteFakeClaude("""
             echo {"type":"result","result":"ok","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}
             exit /b 0
+            """, """
+            echo '{"type":"result","result":"ok","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}'
+            exit 0
             """);
 
         var runner = new ProcessJobRunner();
@@ -72,6 +83,9 @@ public class ProcessJobRunnerTests : IDisposable
         var fake = WriteFakeClaude("""
             echo something went wrong 1>&2
             exit /b 2
+            """, """
+            echo something went wrong >&2
+            exit 2
             """);
 
         var runner = new ProcessJobRunner();
@@ -90,6 +104,9 @@ public class ProcessJobRunnerTests : IDisposable
         // sleeps ~10 seconds without needing a TTY.
         var fake = WriteFakeClaude("""
             ping -n 11 127.0.0.1 > nul
+            echo never
+            """, """
+            sleep 10
             echo never
             """);
 
@@ -124,6 +141,9 @@ public class ProcessJobRunnerTests : IDisposable
         var fake = WriteFakeClaude("""
             echo project=%FIREPIT_PROJECT_NAME% job=%FIREPIT_JOB_NAME% trigger=%FIREPIT_JOB_TRIGGER%
             exit /b 0
+            """, """
+            echo "project=$FIREPIT_PROJECT_NAME job=$FIREPIT_JOB_NAME trigger=$FIREPIT_JOB_TRIGGER"
+            exit 0
             """);
 
         var runner = new ProcessJobRunner();

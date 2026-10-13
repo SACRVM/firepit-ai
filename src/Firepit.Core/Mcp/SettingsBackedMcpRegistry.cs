@@ -51,7 +51,7 @@ public sealed class SettingsBackedMcpRegistry : IMcpRegistry
         _entries = allEntries;
         _byId = _entries.ToDictionary(e => e.Id, StringComparer.OrdinalIgnoreCase);
 
-        var projectMap = new Dictionary<string, (IReadOnlyList<string>, IReadOnlyDictionary<string, McpOverride>)>(StringComparer.OrdinalIgnoreCase);
+        var projectMap = new Dictionary<string, (IReadOnlyList<string>, IReadOnlyDictionary<string, McpOverride>)>(PlatformText.PathComparer);
         foreach (var project in settings.Projects ?? [])
         {
             if (project.McpServers is null || project.McpServers.Count == 0)
@@ -152,8 +152,8 @@ public sealed class SettingsBackedMcpRegistry : IMcpRegistry
         var args = (overrideEntry?.Args ?? entry.Args ?? [])
             .Select(arg => InterpolateInto(arg, warnings, $"args of {entry.Id}"))
             .ToArray();
-        var env = MergeMaps(entry.Environment, overrideEntry?.Environment, warnings, $"env of {entry.Id}");
-        var headers = MergeMaps(entry.Headers, overrideEntry?.Headers, warnings, $"headers of {entry.Id}");
+        var env = MergeMaps(entry.Environment, overrideEntry?.Environment, warnings, $"env of {entry.Id}", PlatformText.EnvironmentNames);
+        var headers = MergeMaps(entry.Headers, overrideEntry?.Headers, warnings, $"headers of {entry.Id}", StringComparer.OrdinalIgnoreCase);
         var url = entry.Url is null ? null : InterpolateInto(entry.Url, warnings, $"url of {entry.Id}");
 
         return new ResolvedMcpServer(
@@ -182,9 +182,10 @@ public sealed class SettingsBackedMcpRegistry : IMcpRegistry
         IReadOnlyDictionary<string, string?>? baseline,
         IReadOnlyDictionary<string, string?>? overrides,
         List<string> warnings,
-        string context)
+        string context,
+        StringComparer keys)
     {
-        var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var merged = new Dictionary<string, string>(keys);
         if (baseline is not null)
         {
             foreach (var (key, value) in baseline)

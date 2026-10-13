@@ -96,4 +96,12 @@ public class FirepitPathsTests
         Assert.Equal(FirepitPaths.FolderNameFor("dev"), FirepitPaths.FolderNameFor("  dev  "));
         Assert.Equal(FirepitPaths.McpPipeNameFor("dev"), FirepitPaths.McpPipeNameFor(" dev "));
     }
+
+    [UnixFact]
+    public void OnUnix_DataFoldersAreLowercase_AndFollowXdg()
+    {
+        Assert.Equal("firepit", FirepitPaths.DataFolderNameFor(null));
+        Assert.Equal("firepit-dev", FirepitPaths.DataFolderNameFor("dev"));
+        Assert.EndsWith("/firepit", FirepitPaths.DefaultRoaming, StringComparison.Ordinal);
+    }
 }

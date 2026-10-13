@@ -56,7 +56,7 @@ public static class FirepitFragments
         var from = Path.GetFullPath(projectPath);
         var to = Path.GetFullPath(fragmentPath);
 
-        if (!string.Equals(Path.GetPathRoot(from), Path.GetPathRoot(to), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetPathRoot(from), Path.GetPathRoot(to), PlatformText.Paths))
         {
             return to;
         }

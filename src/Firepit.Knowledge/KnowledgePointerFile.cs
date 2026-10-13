@@ -152,5 +152,5 @@ public static class KnowledgePointerFile
         string.Equals(
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
             Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
-            StringComparison.OrdinalIgnoreCase);
+            PathText.Comparison);
 }

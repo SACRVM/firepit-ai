@@ -511,7 +511,7 @@ public sealed class KnowledgeService : IDisposable
         // without it.
         var vecError = scope.Store.Vec.CheckAvailable();
 
-        var onDisk = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var onDisk = new Dictionary<string, string>(PathText.Comparer);
         if (Directory.Exists(docsDir))
         {
             foreach (var file in Directory.EnumerateFiles(docsDir, "*.md", SearchOption.AllDirectories))
@@ -613,7 +613,7 @@ public sealed class KnowledgeService : IDisposable
 
     private static Dictionary<string, (string Hash, bool Embedded)> ReadIndexManifest(Scope scope)
     {
-        var result = new Dictionary<string, (string, bool)>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, (string, bool)>(PathText.Comparer);
         if (!scope.Store.IndexExists)
         {
             return result;
@@ -641,7 +641,7 @@ public sealed class KnowledgeService : IDisposable
         }
         catch (Exception)
         {
-            return new Dictionary<string, (string, bool)>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, (string, bool)>(PathText.Comparer);
         }
     }
 
@@ -1220,16 +1220,16 @@ public sealed class KnowledgeService : IDisposable
 
         var root = scope.Store.KnowledgeDir;
         var full = Path.GetFullPath(Path.Combine(root, relativePath));
-        return full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+        return full.StartsWith(root + Path.DirectorySeparatorChar, PathText.Comparison)
             ? full
             : null;
     }
 
     private static bool IsUnder(string dir, string fullPath) =>
-        fullPath.StartsWith(dir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        fullPath.StartsWith(dir + Path.DirectorySeparatorChar, PathText.Comparison);
 
     private static bool PathsEqual(string a, string b) =>
-        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), PathText.Comparison);
 
     private static string Slugify(string title)
     {

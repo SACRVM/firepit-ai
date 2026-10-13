@@ -5,7 +5,7 @@ namespace Firepit.Core.Tests.Artifacts;
 
 public class ArtifactResolverTests
 {
-    private const string ProjectPath = @"C:\repos\demo";
+    private static readonly string ProjectPath = OperatingSystem.IsWindows() ? @"C:\repos\demo" : "/repos/demo";
 
     [Theory]
     [InlineData("shot.png", ArtifactKind.Image)]
@@ -27,14 +27,24 @@ public class ArtifactResolverTests
     public void Resolve_RelativePathBecomesAbsoluteAgainstProject()
     {
         var resolved = ArtifactResolver.Resolve(new ArtifactEntry(@"docs\report.md"), ProjectPath);
-        Assert.Equal(Path.Combine(ProjectPath, @"docs\report.md"), resolved.AbsolutePath);
+        Assert.Equal(Path.Combine(ProjectPath, "docs", "report.md"), resolved.AbsolutePath);
     }
 
     [Fact]
     public void Resolve_AbsolutePathIsKept()
     {
-        var resolved = ArtifactResolver.Resolve(new ArtifactEntry(@"D:\out\demo.exe"), ProjectPath);
-        Assert.Equal(@"D:\out\demo.exe", resolved.AbsolutePath);
+        var absolute = OperatingSystem.IsWindows() ? @"D:\out\demo.exe" : "/out/demo.exe";
+        var resolved = ArtifactResolver.Resolve(new ArtifactEntry(absolute), ProjectPath);
+        Assert.Equal(absolute, resolved.AbsolutePath);
+    }
+
+    [UnixFact]
+    public void Resolve_AWindowsAbsolutePathOnUnix_IsKeptAndShownMissing()
+    {
+        var resolved = ArtifactResolver.Resolve(new ArtifactEntry(@"D:\dev\builds\log.txt"), ProjectPath);
+        Assert.Equal(@"D:\dev\builds\log.txt", resolved.AbsolutePath);
+        Assert.Equal("log.txt", resolved.Label);
+        Assert.False(resolved.Exists);
     }
 
     [Fact]
@@ -79,7 +89,7 @@ public class ArtifactResolverTests
 
 public class ArtifactMutatorTests
 {
-    private const string ProjectPath = @"C:\repos\demo";
+    private static readonly string ProjectPath = OperatingSystem.IsWindows() ? @"C:\repos\demo" : "/repos/demo";
 
     [Fact]
     public void Upsert_AddsNewEntry()
