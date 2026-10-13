@@ -110,7 +110,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on, [], [])
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit-commands 0.3.0')
+  expect(before.text).toContain('firepit-commands 0.3.1')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')

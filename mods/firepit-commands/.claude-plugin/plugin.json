@@ -1,6 +1,6 @@
 {
   "name": "firepit-commands",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Runs the project commands from .firepit/config.json: a button row above the prompt, a panel, and /fire.",
   "types": "./types/index.d.ts",
   "author": {

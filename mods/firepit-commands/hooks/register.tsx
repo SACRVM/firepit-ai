@@ -21,7 +21,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.3.0'
+const VERSION = '0.3.1'
 const PANE = 'firepit-commands'
 const CONFIG = '.firepit/config.json'
 
@@ -107,7 +107,10 @@ async function reloadConfig($: $, force: boolean): Promise<void> {
   const hasShell = next.commands.some(c => c.type === 'shell')
   const stored = await $.store.get(`trust:${root}`)
   await update($, loaded, () => next)
-  await update($, isTrusted, () => !hasShell || stored === next.hash)
+  const trusted = !hasShell || stored === next.hash
+  if ((await read($, isTrusted)) !== trusted) {
+    await update($, isTrusted, () => trusted)
+  }
 }
 
 async function pollUnits($: $): Promise<void> {
@@ -120,7 +123,12 @@ async function pollUnits($: $): Promise<void> {
       .catch(() => undefined)
     if (listing !== undefined) {
       const active = parseActiveUnits(listing.stdout)
-      await update($, running, prev => (prev.join('\n') === active.join('\n') ? prev : active))
+      // Only a change is written. Every write redraws the bar and the panel,
+      // and a click that lands on a drawing just replaced is lost — with a
+      // write every three seconds, panel buttons missed most clicks.
+      if ((await read($, running)).join('\n') !== active.join('\n')) {
+        await update($, running, () => active)
+      }
     }
   }
   const key = await read($, logsFor)
@@ -135,7 +143,9 @@ async function fetchLogs($: $, cfg: Loaded, key: string): Promise<void> {
     .run(['journalctl', '--user', '-u', unit, '-o', 'cat', '-n', '60', '--no-pager'])
     .catch(() => undefined)
   const text = result === undefined ? 'journalctl could not be run.' : result.stdout.trimEnd() || 'No output yet.'
-  await update($, logs, prev => (prev === text ? prev : text))
+  if ((await read($, logs)) !== text) {
+    await update($, logs, () => text)
+  }
 }
 
 async function openPane($: $): Promise<void> {
