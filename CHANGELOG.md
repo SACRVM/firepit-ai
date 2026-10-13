@@ -43,6 +43,23 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Added
 
+- **`firepitd`, Firepit as a user service.** The workspace and its MCP host
+  run under systemd (`firepit.service`, `firepit@<name>.service` for a named
+  instance) and serve every Claude Code session on the machine. A lock in the
+  runtime directory keeps it to one per instance; SIGTERM shuts it down
+  cleanly; every half minute it rescans the projects root, so a fresh clone
+  shows up without a restart. Logs go to `~/.local/share/firepit/logs` and
+  the journal.
+- **The MCP host listens on a Unix socket off Windows**:
+  `$XDG_RUNTIME_DIR/firepit/mcp.sock`, mode 0600 in a 0700 directory.
+- **The bridge places a session by its folder.** `firepit-mcp` sends its
+  working directory in the context frame; when no `FIREPIT_PROJECT_NAME` is
+  set — Claude Code desktop sets none — the host resolves the project from
+  it. A daemon that is not running yet is started once through systemd.
+- **`scripts/install-linux.sh`** installs or updates everything under `$HOME`:
+  the daemon in `~/.local/opt/firepit`, `firepit-mcp` as a .NET global tool
+  (`~/.dotnet/tools` is on the PATH desktop apps get; `~/.local/bin` is not),
+  the systemd units.
 - **Firepit runs without its window.** `Firepit.Workspace` holds everything
   the MCP tools need — projects, knowledge, inbox, commands, artifacts,
   blueprints, integrity, rename, scheduled jobs — lifted out of the WPF

@@ -157,7 +157,7 @@ internal static class McpToolDefinitions
         new("firepit_send_to",
             "Drop a markdown message into <toProject>/.firepit/inbox/. The receiving project's " +
             "Claude reads its inbox at session start (per the seed CLAUDE.md convention). " +
-            "The 'from' field is taken from the calling agent's FIREPIT_PROJECT_NAME env var.",
+            "The 'from' field is the calling session's project: its FIREPIT_PROJECT_NAME, else the project its folder belongs to.",
             """
             {
               "type": "object",

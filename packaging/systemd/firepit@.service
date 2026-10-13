@@ -1,0 +1,11 @@
+[Unit]
+Description=Firepit instance %i — a separate Firepit beside the installed one
+Documentation=https://github.com/SACRVM/firepit-ai/blob/main/docs/LINUX.md
+
+[Service]
+Type=simple
+ExecStart=%h/.local/opt/firepit/firepitd --instance %i
+Restart=on-failure
+RestartSec=2
+Environment=PATH=%h/.local/bin:%h/.dotnet/tools:/usr/local/bin:/usr/bin:/bin
+Environment=FIREPIT_INSTANCE=%i

@@ -1,5 +1,6 @@
 using System.IO;
 using System.IO.Pipes;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -21,6 +22,13 @@ public sealed class McpHost : IDisposable
     /// another running beside it.
     /// </summary>
     public static string PipeName => Firepit.Core.FirepitPaths.McpPipeName;
+
+    /// <summary>
+    /// Where the host listens off Windows: a Unix socket in this instance's
+    /// runtime directory, readable by the user alone. The bridge derives the
+    /// same path from the same rule (tools/firepit-mcp).
+    /// </summary>
+    public static string SocketPath => Path.Combine(Firepit.Core.FirepitPaths.Runtime, "mcp.sock");
 
     /// <summary>
     /// Total <see cref="NamedPipeServerStream"/> instances Windows will hand
@@ -47,6 +55,7 @@ public sealed class McpHost : IDisposable
     private int  _activeClients;
     private int  _exhaustionLogged;
     private bool _disposed;
+    private Socket? _listener;
 
     public McpHost(IMcpBackend backend, string serverVersion = "0.5.0")
     {
@@ -56,6 +65,12 @@ public sealed class McpHost : IDisposable
 
     public void Start()
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            StartUnixSocket();
+            return;
+        }
+
         for (var i = 0; i < ListenerBacklog; i++)
         {
             _ = Task.Run(() => AcceptLoopAsync(_cts.Token));
@@ -70,7 +85,72 @@ public sealed class McpHost : IDisposable
         if (_disposed) return;
         _disposed = true;
         try { _cts.Cancel(); } catch { /* ignored */ }
+        try { _listener?.Dispose(); } catch { /* ignored */ }
+        if (_listener is not null)
+        {
+            try { File.Delete(SocketPath); } catch (IOException) { /* ignored */ }
+        }
         _cts.Dispose();
+    }
+
+    /// <summary>
+    /// Off Windows the host listens on a Unix socket rather than a named
+    /// pipe. .NET maps named pipes onto sockets in <c>$TMPDIR</c> there, where
+    /// host and bridge would have to agree on <c>$TMPDIR</c> and the socket
+    /// would follow the umask; an explicit path in the runtime directory has
+    /// neither problem. One process owns it — the daemon holds a lock — so a
+    /// socket file still on disk is a leftover from a crash and is replaced.
+    /// </summary>
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private void StartUnixSocket()
+    {
+        var path = SocketPath;
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+
+        var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        listener.Bind(new UnixDomainSocketEndPoint(path));
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        listener.Listen(MaxClients);
+        _listener = listener;
+
+        _ = Task.Run(() => UnixAcceptLoopAsync(listener, _cts.Token));
+        Log.Information("MCP host listening on {Socket}", path);
+    }
+
+    private async Task UnixAcceptLoopAsync(Socket listener, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            Socket client;
+            try
+            {
+                client = await listener.AcceptAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+            catch (SocketException ex)
+            {
+                Log.Warning(ex, "MCP socket accept error");
+                try { await Task.Delay(1_000, ct); } catch (OperationCanceledException) { return; }
+                continue;
+            }
+
+            var active = Interlocked.Increment(ref _activeClients);
+            Log.Debug("MCP client connected ({Active})", active);
+            var stream = new NetworkStream(client, ownsSocket: true);
+            _ = Task.Run(() => ServeClientAsync(stream, ct), CancellationToken.None);
+        }
     }
 
     private async Task AcceptLoopAsync(CancellationToken ct)
@@ -134,7 +214,7 @@ public sealed class McpHost : IDisposable
         }
     }
 
-    private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    private async Task ServeClientAsync(Stream pipe, CancellationToken ct)
     {
         try
         {
@@ -158,7 +238,7 @@ public sealed class McpHost : IDisposable
         }
     }
 
-    private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    private async Task HandleClientAsync(Stream pipe, CancellationToken ct)
     {
         var lengthBuf = new byte[4];
 
@@ -166,9 +246,24 @@ public sealed class McpHost : IDisposable
         // which project the calling agent is in (used for firepit_send_to's
         // implicit 'from' field).
         var ctx = await ReadContextHandshakeAsync(pipe, lengthBuf, ct);
-        Log.Debug("MCP client context: project='{Project}' pid={Pid}", ctx.ProjectName, ctx.Pid);
 
-        while (!ct.IsCancellationRequested && pipe.IsConnected)
+        // A client that exports no project name — Claude Code desktop starts
+        // its MCP servers in the session's folder and nothing more — is placed
+        // by that folder instead.
+        if (ctx.ProjectName.Length == 0 && ctx.Cwd.Length > 0)
+        {
+            var resolved = await _backend.ProjectNameForDirectoryAsync(ctx.Cwd);
+            if (resolved is not null)
+            {
+                ctx = ctx with { ProjectName = resolved };
+            }
+        }
+
+        Log.Debug("MCP client context: project='{Project}' cwd='{Cwd}' pid={Pid}", ctx.ProjectName, ctx.Cwd, ctx.Pid);
+
+        // EOF ends the loop: ReadExactlyAsync answers false when the client
+        // hangs up, which covers a pipe and a socket alike.
+        while (!ct.IsCancellationRequested)
         {
             if (!await ReadExactlyAsync(pipe, lengthBuf, 0, 4, ct)) return;
             var length = BitConverter.ToInt32(lengthBuf, 0);
@@ -219,7 +314,8 @@ public sealed class McpHost : IDisposable
             if (ctx is null) return ConnectionContext.Empty;
             return new ConnectionContext(
                 ProjectName: ctx["projectName"]?.GetValue<string>() ?? "",
-                Pid:         ctx["pid"]?.GetValue<int?>() ?? 0);
+                Pid:         ctx["pid"]?.GetValue<int?>() ?? 0,
+                Cwd:         ctx["cwd"]?.GetValue<string>() ?? "");
         }
         catch
         {
@@ -396,7 +492,7 @@ public sealed class McpHost : IDisposable
                 var project = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var result = await _backend.ListInboxAsync(project);
                 // A listing that couldn't be produced must not come back as an
                 // empty one — the caller would read it as "nothing waiting".
@@ -412,7 +508,7 @@ public sealed class McpHost : IDisposable
                 if (string.IsNullOrEmpty(messageId))
                     return BuildErrorResponse(id, -32602, "missing 'id'");
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var result = await _backend.CompleteInboxAsync(project, messageId);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
             }
@@ -426,7 +522,7 @@ public sealed class McpHost : IDisposable
                 if (string.IsNullOrEmpty(toProject) || string.IsNullOrEmpty(subject) || body is null)
                     return BuildErrorResponse(id, -32602, "missing 'toProject', 'subject', or 'body'");
                 if (string.IsNullOrEmpty(fromProject))
-                    return BuildErrorResponse(id, -32603, "Sender project unknown — bridge did not provide FIREPIT_PROJECT_NAME context");
+                    return BuildErrorResponse(id, -32603, "Sender project unknown — the bridge sent no project name and its folder is not a known project");
                 var result = await _backend.SendInboxAsync(fromProject, toProject, subject, body, priority);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.InboxWriteResult)));
             }
@@ -435,7 +531,7 @@ public sealed class McpHost : IDisposable
                 var projectName = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(projectName)) projectName = ctx.ProjectName;
                 if (string.IsNullOrEmpty(projectName))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
 
                 var cmdName = args["name"]?.GetValue<string>();
                 var type    = args["type"]?.GetValue<string>();
@@ -466,7 +562,7 @@ public sealed class McpHost : IDisposable
                 var projectName = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(projectName)) projectName = ctx.ProjectName;
                 if (string.IsNullOrEmpty(projectName))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var result = await _backend.ListProjectCommandsAsync(projectName);
                 if (result.Error is { Length: > 0 } err)
                     return BuildErrorResponse(id, -32602, err);
@@ -477,7 +573,7 @@ public sealed class McpHost : IDisposable
                 var projectName = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(projectName)) projectName = ctx.ProjectName;
                 if (string.IsNullOrEmpty(projectName))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var cmdName = args["name"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(cmdName))
                     return BuildErrorResponse(id, -32602, "missing 'name'");
@@ -505,7 +601,7 @@ public sealed class McpHost : IDisposable
                 var scope = args["scope"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(scope)) scope = ctx.ProjectName;
                 if (string.IsNullOrEmpty(scope))
-                    return BuildErrorResponse(id, -32602, "missing 'scope' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'scope' (and the caller's folder is not a known project)");
                 var result = await _backend.GetKnowledgeDocumentAsync(scope, path);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.KnowledgeDocumentResult)));
             }
@@ -520,7 +616,7 @@ public sealed class McpHost : IDisposable
                 var scope = args["scope"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(scope)) scope = ctx.ProjectName;
                 if (string.IsNullOrEmpty(scope))
-                    return BuildErrorResponse(id, -32602, "missing 'scope' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'scope' (and the caller's folder is not a known project)");
                 var pinned = args["pinned"]?.GetValue<bool?>() ?? false;
                 var result = await _backend.AddKnowledgeDocumentAsync(scope, title, content, pinned);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.KnowledgeDocumentResult)));
@@ -536,7 +632,7 @@ public sealed class McpHost : IDisposable
                 var scope = args["scope"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(scope)) scope = ctx.ProjectName;
                 if (string.IsNullOrEmpty(scope))
-                    return BuildErrorResponse(id, -32602, "missing 'scope' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'scope' (and the caller's folder is not a known project)");
                 var title  = args["title"]?.GetValue<string>();
                 var pinned = args["pinned"]?.GetValue<bool?>();
                 var result = await _backend.UpdateKnowledgeDocumentAsync(scope, path, content, title, pinned);
@@ -550,7 +646,7 @@ public sealed class McpHost : IDisposable
                 var scope = args["scope"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(scope)) scope = ctx.ProjectName;
                 if (string.IsNullOrEmpty(scope))
-                    return BuildErrorResponse(id, -32602, "missing 'scope' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'scope' (and the caller's folder is not a known project)");
                 var result = await _backend.DeleteKnowledgeDocumentAsync(scope, path);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
             }
@@ -580,7 +676,7 @@ public sealed class McpHost : IDisposable
                 var project   = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var blueprint = args["blueprint"]?.GetValue<string?>() ?? "firepit";
                 var fix       = args["fixBlanketIgnores"]?.GetValue<bool?>() ?? false;
                 var result = await _backend.ApplyBlueprintAsync(project, blueprint, fix);
@@ -594,7 +690,7 @@ public sealed class McpHost : IDisposable
                 var project = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var label = args["label"]?.GetValue<string?>();
                 var note  = args["note"]?.GetValue<string?>();
                 var result = await _backend.AddArtifactAsync(project, path, label, note);
@@ -609,7 +705,7 @@ public sealed class McpHost : IDisposable
                 var project = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var result = await _backend.RemoveArtifactAsync(project, path, label);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
             }
@@ -618,7 +714,7 @@ public sealed class McpHost : IDisposable
                 var project = args["projectName"]?.GetValue<string>();
                 if (string.IsNullOrEmpty(project)) project = ctx.ProjectName;
                 if (string.IsNullOrEmpty(project))
-                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and caller did not supply FIREPIT_PROJECT_NAME)");
+                    return BuildErrorResponse(id, -32602, "missing 'projectName' (and the caller's folder is not a known project)");
                 var result = await _backend.ListArtifactsAsync(project);
                 if (result.Error is { Length: > 0 } err)
                     return BuildErrorResponse(id, -32602, err);
@@ -657,7 +753,7 @@ public sealed class McpHost : IDisposable
     /// pipe. Carries the calling agent's FIREPIT_PROJECT_NAME so handlers
     /// like firepit_send_to know which project a tool call originated from.
     /// </summary>
-    public sealed record ConnectionContext(string ProjectName, int Pid)
+    public sealed record ConnectionContext(string ProjectName, int Pid, string Cwd = "")
     {
         public static readonly ConnectionContext Empty = new("", 0);
     }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Firepit — knowledge, inbox and artifacts for Claude Code sessions
+Documentation=https://github.com/SACRVM/firepit-ai/blob/main/docs/LINUX.md
+
+[Service]
+Type=simple
+ExecStart=%h/.local/opt/firepit/firepitd
+Restart=on-failure
+RestartSec=2
+# Scheduled jobs run `claude`; a natively installed Claude Code lives in
+# ~/.local/bin, which the user manager's PATH does not include.
+Environment=PATH=%h/.local/bin:%h/.dotnet/tools:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

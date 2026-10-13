@@ -12,11 +12,19 @@
     <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <PublishTrimmed>false</PublishTrimmed>
+    <!-- Installed as a .NET global tool: ~/.dotnet/tools is on the PATH that
+         desktop apps inherit on Linux, ~/.local/bin is not, and Claude Code
+         desktop starts firepit-mcp by bare name from every repo's .mcp.json.
+         scripts/install-linux.sh packs and installs it. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>firepit-mcp</ToolCommandName>
+    <PackageId>firepit-mcp</PackageId>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)../../bin/nupkg/</PackageOutputPath>
     <!-- Keep in sync with src/Firepit/Firepit.csproj — /release bumps both.
          A stale value here makes firepit-mcp.exe's file-version resource
          disagree with the version the MCP handshake reports, which sends
          diagnostics down the wrong path. -->
-    <Version>0.30.0</Version>
+    <Version>0.31.0</Version>
     <!-- Land alongside Firepit.exe so the installer can pick both up
          from the same publish dir. -->
     <PublishDir>$(MSBuildThisFileDirectory)../../bin/$(RuntimeIdentifier)/</PublishDir>

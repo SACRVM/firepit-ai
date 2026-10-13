@@ -1,14 +1,17 @@
 namespace Firepit.Mcp;
 
 /// <summary>
-/// Surface the MCP host calls into the running Firepit GUI through.
-/// MainWindow implements this. All members are async — the host always
-/// awaits. Implementations are responsible for marshalling onto the WPF
-/// dispatcher when they touch UI state.
+/// Surface the MCP host calls into Firepit through. FirepitWorkspace
+/// implements it. All members are async — the host always awaits, from its
+/// connection threads; implementations serialise what needs serialising.
 /// </summary>
 public interface IMcpBackend
 {
     Task<IReadOnlyList<ProjectInfo>>  ListProjectsAsync();
+
+    /// <summary>The project a directory belongs to — the session's working
+    /// directory, for clients that export no project name. Null when none.</summary>
+    Task<string?>                     ProjectNameForDirectoryAsync(string directory);
     Task<IReadOnlyList<SessionInfo>>  ListSessionsAsync();
 
     /// <summary>Effective settings as a JSON object string with secret values redacted.</summary>

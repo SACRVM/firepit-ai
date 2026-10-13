@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Firepit.Adapters/Firepit.Adapters.csproj" />
     <Project Path="src/Firepit.Core/Firepit.Core.csproj" />
+    <Project Path="src/Firepit.Daemon/Firepit.Daemon.csproj" />
     <Project Path="src/Firepit.Knowledge/Firepit.Knowledge.csproj" />
     <Project Path="src/Firepit.Mcp/Firepit.Mcp.csproj" />
     <Project Path="src/Firepit.Process/Firepit.Process.csproj" />

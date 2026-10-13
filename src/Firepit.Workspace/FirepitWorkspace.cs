@@ -99,6 +99,8 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         {
             RunProjectConfigMigrationIfNeeded();
             ReloadProjectList();
+            _projectsFingerprint = ProjectsFingerprint();
+            _settingsStamp = _loadedSettingsStamp = SettingsStamp();
             return true;
         }).ConfigureAwait(false);
 
@@ -148,8 +150,74 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         {
             _settings = _settingsStore.Load();
             ReloadProjectList();
+            _projectsFingerprint = ProjectsFingerprint();
             return true;
         });
+
+    /// <summary>
+    /// Re-reads settings and the project list when either changed on disk: a
+    /// repo cloned into the projects root, an entry edited into
+    /// settings.json. The window rescanned whenever its project picker
+    /// opened; a daemon has no such moment, so it asks on a timer. Cheap —
+    /// one directory listing and one settings read.
+    /// </summary>
+    /// <returns>Whether anything was reloaded.</returns>
+    public Task<bool> RescanIfChangedAsync() =>
+        Serialized(() =>
+        {
+            // Records with list members never compare equal after a fresh
+            // load, so the settings file's timestamp stands in for its content.
+            var settingsStamp = SettingsStamp();
+            if (settingsStamp != _settingsStamp)
+            {
+                _settings = _settingsStore.Load();
+                _settingsStamp = settingsStamp;
+            }
+
+            var fingerprint = ProjectsFingerprint();
+            if (fingerprint == _projectsFingerprint && settingsStamp == _loadedSettingsStamp)
+            {
+                return false;
+            }
+
+            ReloadProjectList();
+            _projectsFingerprint = ProjectsFingerprint();
+            _loadedSettingsStamp = settingsStamp;
+            return true;
+        });
+
+    private string _projectsFingerprint = string.Empty;
+    private DateTime _settingsStamp;
+    private DateTime _loadedSettingsStamp;
+
+    private DateTime SettingsStamp() =>
+        _settingsStore is JsonSettingsStore json && File.Exists(json.SettingsPath)
+            ? File.GetLastWriteTimeUtc(json.SettingsPath)
+            : default;
+
+    private string ProjectsFingerprint() => ProjectsFingerprint(_settings.ProjectsRoot);
+
+    /// <summary>The project root's folders, and which of them look like projects.</summary>
+    private static string ProjectsFingerprint(string root)
+    {
+        try
+        {
+            if (!Directory.Exists(root))
+            {
+                return string.Empty;
+            }
+
+            return string.Join('\n', Directory.EnumerateDirectories(root)
+                .Order(StringComparer.Ordinal)
+                .Select(d => $"{Path.GetFileName(d)}:" +
+                             $"{File.Exists(Path.Combine(d, "CLAUDE.md"))}:" +
+                             $"{Directory.Exists(Path.Combine(d, ".claude"))}"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return string.Empty;
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- firepitd: the workspace and its MCP host as a user service. Runs under
+       systemd on Linux (packaging/systemd/firepit.service); Claude Code
+       sessions reach it through the firepit-mcp bridge. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>firepitd</AssemblyName>
+    <RootNamespace>Firepit.Daemon</RootNamespace>
+    <!-- Keep in sync with tools/firepit-mcp — the MCP handshake reports it. -->
+    <Version>0.31.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Firepit.Workspace/Firepit.Workspace.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <!-- stderr is what journald keeps (journalctl, unit firepit). -->
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+  </ItemGroup>
+
+</Project>

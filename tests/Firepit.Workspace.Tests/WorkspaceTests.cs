@@ -193,4 +193,16 @@ public sealed class WorkspaceTests : IAsyncLifetime
         Assert.False(Directory.Exists(Path.Combine(_projects, "beta")));
         Assert.Contains("gamma", (await _ws.ListProjectsAsync()).Select(p => p.Name));
     }
+
+    [Fact]
+    public async Task AFreshClone_AppearsOnTheNextRescan_AndAQuietRootChangesNothing()
+    {
+        Assert.False(await _ws.RescanIfChangedAsync());
+
+        MakeProject("delta");
+
+        Assert.True(await _ws.RescanIfChangedAsync());
+        Assert.Contains("delta", (await _ws.ListProjectsAsync()).Select(p => p.Name));
+        Assert.False(await _ws.RescanIfChangedAsync());
+    }
 }

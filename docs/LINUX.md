@@ -1,7 +1,7 @@
 # Firepit on Linux
 
 **Target:** v0.31.0 (headless platform)
-**Status:** decided 2026-10-13 — M10 and M11 done, M12 next
+**Status:** decided 2026-10-13 — M10–M12 done
 
 ## Decisions (2026-10-13)
 
@@ -334,6 +334,18 @@ auto-delivery, the WPF build against the service.
 `firepit_knowledge_search` (hybrid, not degraded), `firepit_inbox_list`,
 `firepit_send_to`, `firepit_artifact_add` work; a scheduled job fires
 from the daemon; reboot → first MCP call starts it again.
+
+**Done (2026-10-13):** `firepitd` (src/Firepit.Daemon) hosts the workspace
+and the MCP host on `$XDG_RUNTIME_DIR/firepit/mcp.sock`; `firepit-mcp` sends
+its working directory and the host resolves the project from it. Plain
+`firepit.service` (enabled at login) instead of socket activation — the
+bridge starts the unit itself when the socket is missing, which covers the
+same case with less machinery. `firepit-mcp` installs as a .NET global tool
+rather than into `~/.local/bin`, because `~/.dotnet/tools` is on the desktop
+PATH without a re-login. The `firepit` CLI (`open`, `inbox`, `status`) is
+left out: the commands mod and the MCP tools cover it. Smoke test: 53
+projects, 52 knowledge scopes, no warnings; inbox, hybrid search and
+artifacts answered through the bridge from a project folder.
 
 Tag `v0.31.0`. **⛳2 here.**
 

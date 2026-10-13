@@ -43,6 +43,9 @@ public sealed partial class FirepitWorkspace
                     SessionState: state);
             }).ToArray());
 
+    public Task<string?> ProjectNameForDirectoryAsync(string directory) =>
+        Serialized(() => FindProjectByPath(directory)?.Name);
+
     public Task<CreateProjectResult> CreateProjectAsync(string name, string? path, bool applyBlueprint) =>
         Serialized(() =>
         {
