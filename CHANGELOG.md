@@ -43,6 +43,16 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Added
 
+- **Project commands in Claude Code**: the `firepit-commands` mod
+  (`mods/firepit-commands`) puts the commands from `.firepit/config.json`
+  into a button bar above the prompt (`Git:` status repo), a panel with
+  descriptions, logs and output, and `/fire`. Long-running commands run as
+  systemd user units, windowed ones in Konsole; shell commands wait for
+  trust. The repository is a plugin marketplace pointing at the folder, so
+  the installed mod is read from the working copy.
+- **Commands carry a `description` and a `bar` flag**; a group plus a short
+  name reads as a phrase (*Git status*). Old `quickLinks` show as a `Links`
+  group.
 - **`firepitd`, Firepit as a user service.** The workspace and its MCP host
   run under systemd (`firepit.service`, `firepit@<name>.service` for a named
   instance) and serve every Claude Code session on the machine. A lock in the
