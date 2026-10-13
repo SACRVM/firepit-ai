@@ -392,6 +392,12 @@ Inbox window, artifacts pane + viewer (same web view, Markdig HTML), project
 settings dialog, commands with trust gate, drag & drop of files and images
 into the terminal, update badge.
 
+**Without a shell (2026-10-13):** the `firepit-commands` mod already covers
+the commands with their trust gate, the inbox with its badge and
+auto-delivery into idle sessions (turn events instead of OSC 9;4; a mode per
+project instead of the focused-tab gate, which Claude Code desktop does not
+expose), and the artifacts with a markdown/text viewer.
+
 ### M16 — Packaging & retirement
 
 - `dotnet publish -r linux-x64` (framework-dependent; `dotnet-runtime` comes

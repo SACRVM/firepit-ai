@@ -39,6 +39,44 @@ export type Loaded = {
   hash: string
 }
 
+/** One pending message in `.firepit/inbox/`, as its frontmatter names it. */
+export type InboxMessage = {
+  /** The file name: what `firepit_inbox_complete` takes. */
+  id: string
+  from: string
+  subject: string
+  /** `low`, `normal` or `high`, as the sender wrote it. */
+  priority: string
+  /** ISO time, when the message carries one. */
+  sentAt: string | null
+}
+
+/**
+ * What happens when a message arrives while the session is open: nothing but
+ * the badge, Claude summarises it and waits, or Claude does the work.
+ */
+export type InboxMode = 'off' | 'tell' | 'act'
+
+export type ArtifactKind = 'image' | 'markdown' | 'text' | 'document' | 'executable' | 'archive' | 'other'
+
+/** One link from `.firepit/artifacts.json`. */
+export type Artifact = {
+  /** As stored: relative to the project root, or absolute. */
+  path: string
+  /** Where it is on this machine; a Windows path stays as it was. */
+  absolute: string
+  label: string
+  note: string | null
+  kind: ArtifactKind
+  addedAt: string | null
+  exists: boolean
+}
+
+/** What the viewer pane shows. */
+export type Viewing =
+  | { kind: 'message'; message: InboxMessage; body: string }
+  | { kind: 'artifact'; artifact: Artifact; text: string; isCut: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
     'firepit-commands': {
@@ -50,6 +88,12 @@ declare module 'claude-code' {
       logsFor: string | null
       logs: string
       showDetails: boolean
+      inbox: InboxMessage[]
+      inboxMode: InboxMode
+      showAllMessages: boolean
+      artifacts: Artifact[]
+      showAllArtifacts: boolean
+      viewing: Viewing | null
     }
   }
 }

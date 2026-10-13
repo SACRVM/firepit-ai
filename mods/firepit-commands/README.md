@@ -1,21 +1,42 @@
 # firepit-commands
 
-The project commands from `.firepit/config.json`, inside Claude Code: a
-button bar above the prompt, a panel with descriptions, logs and output, and
-`/fire`.
+Firepit inside Claude Code: the project commands from `.firepit/config.json`
+as a button bar above the prompt, the project's inbox and pinned artifacts,
+one panel for all three, and `/fire`.
 
 ```
-Run: site ticker   Build: app broken   Git: status repo   …   panel
+Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
 ```
 
-- **Bar** — each group once, then its buttons. `"bar": false` keeps a
-  command in the panel only.
-- **Panel** — the same groups, one line per command with its
-  `description`; long-running commands show ● running with stop and logs;
-  `details` shows what each command actually runs.
-- **`/fire`** opens the panel, `/fire git status` runs one, `/fire trust`
+- **Bar** — the inbox count when something is pending, then each command
+  group once with its buttons. `"bar": false` keeps a command in the panel
+  only.
+- **Panel** (*Firepit*) — the inbox, the command groups with one line per
+  command and its `description` (long-running ones show ● running with stop
+  and logs; `details` shows what each command actually runs), and the
+  artifacts.
+- **Inbox** — each pending message in `.firepit/inbox/` with sender and age.
+  A message opens in the viewer with *Hand to Claude* (sent as your request)
+  and *Done* (`firepit_inbox_complete`). *new messages* decides what happens
+  when one arrives while the session is open, per project: **tell** (default)
+  — once the session is idle, Claude is told under the mod's name, summarises
+  and waits for your go; **act** — Claude does the work, asks before anything
+  irreversible, reports back and does not forward it; **off** — it only shows
+  up here. What was already waiting when the session started is never handed
+  over on its own; *all to Claude* does that on request.
+- **Artifacts** — the links in `.firepit/artifacts.json`, newest first.
+  Markdown and text open in the viewer, everything else with `xdg-open`;
+  *folder* selects the file in the file manager; a link that points nowhere
+  (such as a Windows path) says *missing*. *unpin* is
+  `firepit_artifact_remove`; the file stays.
+- **`/fire`** opens the panel, `/fire git status` runs a command,
+  `/fire inbox` and `/fire artifacts` list them in the chat, `/fire trust`
   trusts the project's shell commands, `/fire status` says which version is
-  loaded and what runs, `/fire reload` rereads the config.
+  loaded and what runs, `/fire reload` rereads everything.
+
+*Done* and *unpin* need Firepit's MCP server (`firepit`, from the project's
+`.mcp.json`) connected in the session; reading the inbox and the artifacts
+does not.
 
 How commands run on Linux: long-running ones as systemd user units
 (`firepit-<project>-<id>`, logs in the panel and the journal), windowed ones

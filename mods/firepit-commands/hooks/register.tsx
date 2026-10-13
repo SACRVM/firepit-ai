@@ -1,9 +1,12 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, FsEntry, McpToolResult, Register } from 'claude-code'
 
-import type { Cmd, Loaded } from '../types'
+import type { Artifact, Cmd, InboxMessage, InboxMode, Loaded } from '../types'
+import { clip, fileName, fileUri, isViewable, isWindowsPath, readArtifacts } from './artifacts'
+import { ago, deliveryPrompt, handOverPrompt, isMode, MODES, parseMessage, sameMessages, sweep } from './inbox'
 import {
   findCommands,
+  hashKey,
   inlineArgv,
   launchArgv,
   parseActiveUnits,
@@ -21,9 +24,16 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.3.1'
+const VERSION = '0.4.0'
 const PANE = 'firepit-commands'
+const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'
+const INBOX = '.firepit/inbox'
+const ARTIFACTS = '.firepit/artifacts.json'
+/** The Firepit MCP server, as each project's .mcp.json names it. */
+const MCP = 'firepit'
+/** Rows a panel section shows before "all". */
+const SHOWN = 8
 
 const loaded = atom({ plugin: 'firepit-commands', key: 'loaded' } as const, null)
 const running = atom({ plugin: 'firepit-commands', key: 'running' } as const, [])
@@ -33,11 +43,34 @@ const confirming = atom({ plugin: 'firepit-commands', key: 'confirming' } as con
 const logsFor = atom({ plugin: 'firepit-commands', key: 'logsFor' } as const, null)
 const logs = atom({ plugin: 'firepit-commands', key: 'logs' } as const, '')
 const showDetails = atom({ plugin: 'firepit-commands', key: 'showDetails' } as const, false)
+const inbox = atom({ plugin: 'firepit-commands', key: 'inbox' } as const, [])
+const inboxMode = atom({ plugin: 'firepit-commands', key: 'inboxMode' } as const, 'tell')
+const showAllMessages = atom({ plugin: 'firepit-commands', key: 'showAllMessages' } as const, false)
+const artifacts = atom({ plugin: 'firepit-commands', key: 'artifacts' } as const, [])
+const showAllArtifacts = atom({ plugin: 'firepit-commands', key: 'showAllArtifacts' } as const, false)
+const viewing = atom({ plugin: 'firepit-commands', key: 'viewing' } as const, null)
 
 // Module variables start over on a hot reload; nothing drawn depends on them.
 let lastRoot = ''
 let lastMtime = -1
 let launches = 0
+
+// Inbox and artifacts: what was read last, so a sweep that finds nothing new writes nothing.
+let inboxRoot = ''
+let inboxSignature = ''
+const parsedMessages = new Map<string, { mtimeMs: number; message: InboxMessage }>()
+let artifactsRoot = ''
+let artifactsMtime = -2
+let artifactSweeps = 0
+let isSweeping = false
+
+// Delivery. The ids that are not news: whatever sat in the inbox when the
+// session started (a hot reload starts it over, which only means a message
+// that came in during the reload is not handed over), and what was handed over
+// since. Turns in flight, by id: a session with one running is not idle.
+let handled: Set<string> | null = null
+const activeTurns = new Set<string>()
+let idleSweeps = 0
 
 /** Runs a press handler's work; a failure becomes a toast, never an unhandled rejection. */
 function fire($: $, work: Promise<unknown>): void {
@@ -149,7 +182,7 @@ async function fetchLogs($: $, cfg: Loaded, key: string): Promise<void> {
 }
 
 async function openPane($: $): Promise<void> {
-  await $.ui.open({ id: PANE, title: 'Commands' })
+  await $.ui.open({ id: PANE, title: 'Firepit' })
 }
 
 async function showLogs($: $, cmd: Cmd): Promise<void> {
@@ -325,6 +358,251 @@ async function openTerminal($: $): Promise<void> {
   if (started === undefined || started.exitCode !== 0) $.ui.toast('Could not open a terminal.')
 }
 
+/** The pending messages, newest last; reads only files that are new or changed. */
+async function readInbox($: $, force: boolean): Promise<InboxMessage[]> {
+  const root = await $.session.root()
+  const dir = `${root}/${INBOX}`
+  const entries: readonly FsEntry[] = await $.fs.list(dir).catch(() => [])
+  const files = entries
+    .filter(f => f.kind === 'file' && f.name.toLowerCase().endsWith('.md'))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const signature = files.map(f => `${f.name}:${f.mtimeMs}`).join('\n')
+  if (!force && root === inboxRoot && signature === inboxSignature) return read($, inbox)
+  if (root !== inboxRoot) parsedMessages.clear()
+  inboxRoot = root
+  inboxSignature = signature
+
+  const next: InboxMessage[] = []
+  for (const f of files) {
+    const cached = parsedMessages.get(f.name)
+    if (cached !== undefined && cached.mtimeMs === f.mtimeMs) {
+      next.push(cached.message)
+      continue
+    }
+    const text = await $.fs.read(`${dir}/${f.name}`).catch(() => null)
+    if (typeof text !== 'string') continue
+    const { message } = parseMessage(f.name, text)
+    parsedMessages.set(f.name, { mtimeMs: f.mtimeMs, message })
+    next.push(message)
+  }
+  for (const name of [...parsedMessages.keys()]) {
+    if (!files.some(f => f.name === name)) parsedMessages.delete(name)
+  }
+  if (!sameMessages(await read($, inbox), next)) await update($, inbox, () => next)
+  return next
+}
+
+/**
+ * Hands new messages to Claude once the session is idle, as the Firepit
+ * shell did: the inbox stays the transport, this only says something came.
+ */
+async function deliverInbox($: $, messages: InboxMessage[]): Promise<void> {
+  if (handled === null) {
+    handled = new Set(messages.map(m => m.id))
+    return
+  }
+  const known = handled
+  // What left the inbox needs no memory; the set stays the inbox's size.
+  for (const id of [...known]) if (!messages.some(m => m.id === id)) known.delete(id)
+  const fresh = messages.filter(m => !known.has(m.id))
+  const mode = await read($, inboxMode)
+  if (mode === 'off') {
+    // Off means not now and not later: switching on hands over only what comes after.
+    for (const m of fresh) known.add(m.id)
+    return
+  }
+  let isIdle = activeTurns.size === 0
+  if (isIdle && fresh.length > 0) {
+    // Not while the person is typing a prompt of their own.
+    const box = await $.prompt.read().catch(() => ({ text: '' }))
+    isIdle = box.text.trim() === ''
+  }
+  const step = sweep({ mode, isIdle, idleSweeps, fresh })
+  idleSweeps = step.idleSweeps
+  if (step.deliver.length === 0) return
+  for (const m of step.deliver) known.add(m.id)
+  // Under the plugin's name: Claude reads it as Firepit's notice, not as the person's words.
+  const result = await $.prompt.submit({ text: deliveryPrompt(mode, step.deliver) }).catch(() => undefined)
+  if (result === undefined || result.drop !== undefined) {
+    for (const m of step.deliver) known.delete(m.id)
+  }
+}
+
+/** `.firepit/artifacts.json`, when it changed, and every 30 s whether the files still exist. */
+async function readArtifactLinks($: $, force: boolean): Promise<void> {
+  const root = await $.session.root()
+  const path = `${root}/${ARTIFACTS}`
+  const stat = await $.fs.stat(path).catch(() => undefined)
+  const mtime = stat?.kind === 'file' ? stat.mtimeMs : -1
+  artifactSweeps += 1
+  const isRecheck = artifactSweeps % 15 === 0
+  if (!force && !isRecheck && root === artifactsRoot && mtime === artifactsMtime) return
+  artifactsRoot = root
+  artifactsMtime = mtime
+
+  let next: Artifact[] = []
+  if (mtime >= 0) {
+    try {
+      next = readArtifacts(JSON.parse(String(await $.fs.read(path)).replace(/^﻿/, '')), root)
+    } catch {
+      next = []
+    }
+    for (const a of next) {
+      a.exists = !isWindowsPath(a.absolute) && (await $.fs.exists(a.absolute).catch(() => false))
+    }
+  }
+  if (JSON.stringify(await read($, artifacts)) !== JSON.stringify(next)) await update($, artifacts, () => next)
+}
+
+async function sweepRecords($: $): Promise<void> {
+  if (isSweeping) return
+  isSweeping = true
+  try {
+    await deliverInbox($, await readInbox($, false))
+    await readArtifactLinks($, false)
+  } finally {
+    isSweeping = false
+  }
+}
+
+/** Calls a Firepit tool; resolves an error to show, or null when it worked. */
+async function firepitTool($: $, tool: string, args: Record<string, unknown>): Promise<string | null> {
+  let result: McpToolResult
+  try {
+    result = await $.mcp.call(MCP, tool, args)
+  } catch (error) {
+    return `Firepit did not answer (${error instanceof Error ? error.message : String(error)}). Is its MCP server connected? See /mcp.`
+  }
+  const text = result.content.map(c => c.text ?? '').join('')
+  if (result.isError) return text || `${tool} failed.`
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const ok = parsed.ok ?? parsed.Ok
+    const message = parsed.message ?? parsed.Message
+    if (ok === false) return typeof message === 'string' && message !== '' ? message : `${tool} failed.`
+  } catch {
+    // Not JSON: the tool said something in words, which is fine.
+  }
+  return null
+}
+
+async function setMode($: $, mode: InboxMode): Promise<void> {
+  await $.store.set(`inbox-mode:${await $.session.root()}`, mode)
+  await update($, inboxMode, () => mode)
+}
+
+async function handOver($: $, message: InboxMessage | null): Promise<void> {
+  // A press is the person asking, so it goes in as their words.
+  await $.prompt.submit({ text: handOverPrompt(message), asUser: true })
+}
+
+async function completeMessage($: $, message: InboxMessage): Promise<void> {
+  const error = await firepitTool($, 'firepit_inbox_complete', { id: message.id })
+  if (error !== null) {
+    $.ui.toast(error)
+    return
+  }
+  const shown = await read($, viewing)
+  if (shown?.kind === 'message' && shown.message.id === message.id) await closeViewer($)
+  await readInbox($, true)
+}
+
+async function unpin($: $, artifact: Artifact): Promise<void> {
+  const error = await firepitTool($, 'firepit_artifact_remove', { path: artifact.path })
+  if (error !== null) {
+    $.ui.toast(error)
+    return
+  }
+  const shown = await read($, viewing)
+  if (shown?.kind === 'artifact' && shown.artifact.path === artifact.path) await closeViewer($)
+  await readArtifactLinks($, true)
+}
+
+function title(text: string): string {
+  return text.length <= 60 ? text : `${text.slice(0, 59)}…`
+}
+
+async function viewMessage($: $, message: InboxMessage): Promise<void> {
+  const text = await $.fs.read(`${await $.session.root()}/${INBOX}/${message.id}`).catch(() => null)
+  if (typeof text !== 'string') {
+    $.ui.toast('That message is no longer in the inbox.')
+    await readInbox($, true)
+    return
+  }
+  const { body } = parseMessage(message.id, text)
+  await update($, viewing, () => ({ kind: 'message', message, body: clip(body).text }))
+  await $.ui.open({ id: VIEWER, title: title(message.subject) })
+}
+
+async function openArtifact($: $, artifact: Artifact): Promise<void> {
+  if (!artifact.exists) {
+    $.ui.toast(`${artifact.label} is missing: ${artifact.path}`)
+    return
+  }
+  if (isViewable(artifact.kind)) {
+    const text = await $.fs.read(artifact.absolute).catch(() => null)
+    if (typeof text === 'string') {
+      await update($, viewing, () => ({ kind: 'artifact', artifact, ...clip(text) }))
+      await $.ui.open({ id: VIEWER, title: title(artifact.label) })
+      return
+    }
+  }
+  await openExternally($, artifact.absolute)
+}
+
+async function openExternally($: $, absolute: string): Promise<void> {
+  const opened = await $.process.run(['xdg-open', absolute], { timeoutMs: 15000 }).catch(() => undefined)
+  if (opened === undefined || opened.exitCode !== 0) $.ui.toast(`Could not open ${fileName(absolute)}.`)
+}
+
+/** Selects the file in the file manager (Dolphin answers ShowItems), else opens its folder. */
+async function showInFolder($: $, absolute: string): Promise<void> {
+  const shown = await $.process
+    .run(
+      [
+        'dbus-send',
+        '--session',
+        '--dest=org.freedesktop.FileManager1',
+        '--type=method_call',
+        '/org/freedesktop/FileManager1',
+        'org.freedesktop.FileManager1.ShowItems',
+        `array:string:${fileUri(absolute)}`,
+        'string:',
+      ],
+      { timeoutMs: 15000 },
+    )
+    .catch(() => undefined)
+  if (shown !== undefined && shown.exitCode === 0) return
+  await openExternally($, absolute.replace(/\/[^/]*$/, '') || '/')
+}
+
+async function closeViewer($: $): Promise<void> {
+  await update($, viewing, () => null)
+  await $.ui.close({ id: VIEWER })
+}
+
+async function backToPanel($: $): Promise<void> {
+  await closeViewer($)
+  await openPane($)
+}
+
+function inboxText(messages: InboxMessage[], mode: InboxMode): string {
+  const explains = MODES.find(m => m.mode === mode)?.explains ?? ''
+  if (messages.length === 0) return `Inbox: empty. New messages: ${mode} — ${explains}`
+  return [
+    `Inbox: ${messages.length} pending. New messages: ${mode} — ${explains}`,
+    ...[...messages].reverse().map(m => `  ${m.priority === 'high' ? '! ' : ''}${m.subject} — from ${m.from}`),
+  ].join('\n')
+}
+
+function artifactsText(links: Artifact[]): string {
+  if (links.length === 0) return 'Artifacts: none pinned.'
+  return [
+    `Artifacts: ${links.length} pinned.`,
+    ...links.map(a => `  ${a.label} — ${a.exists ? a.path : `missing: ${a.path}`}`),
+  ].join('\n')
+}
+
 /** What actually runs, and how: the panel's small print. */
 function technical(cmd: Cmd): string {
   if (cmd.type === 'claude-prompt') return `sends to Claude: ${cmd.prompt ?? ''}`
@@ -350,19 +628,39 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'fire',
-      description: 'Firepit project commands: /fire opens the panel, /fire git status runs one; also reload, trust, status',
+      description: 'Firepit: /fire opens the panel, /fire git status runs a command; also inbox, artifacts, reload, trust, status',
       argumentHint: '[group] [command]',
       immediate: true,
     })
     await reloadConfig($, true).catch(() => undefined)
     await pollUnits($).catch(() => undefined)
+
+    activeTurns.clear()
+    idleSweeps = 0
+    const storedMode = await $.store.get(`inbox-mode:${await $.session.root()}`).catch(() => undefined)
+    if (isMode(storedMode) && storedMode !== (await read($, inboxMode))) await update($, inboxMode, () => storedMode)
+    handled = null
+    await sweepRecords($).catch(() => undefined)
+
     $.clock.every(2000, () => {
       void reloadConfig($, false).catch(() => undefined)
+      void sweepRecords($).catch(() => undefined)
     })
     $.clock.every(3000, () => {
       void pollUnits($).catch(() => undefined)
     })
 
+    return next(e)
+  })
+
+  // Idle is no turn in flight; a subagent's turns count too.
+  on('turn.start', async ($, e, next) => {
+    activeTurns.add(e.turnId)
+    idleSweeps = 0
+    return next(e)
+  })
+  on('turn.complete', async ($, e, next) => {
+    activeTurns.delete(e.turnId)
     return next(e)
   })
 
@@ -378,20 +676,29 @@ export const register: Register = on => {
           cfg === null ? `No ${CONFIG} in ${await $.session.root()}` : `${cfg.root}/${CONFIG}: ${cfg.commands.length} commands`,
           `trusted: ${(await read($, isTrusted)) ? 'yes' : 'no'}`,
           `running: ${active.length === 0 ? 'nothing' : active.join(', ')}`,
+          `inbox: ${(await read($, inbox)).length} pending, new messages: ${await read($, inboxMode)}`,
+          `artifacts: ${(await read($, artifacts)).length} pinned`,
         ].join('\n'),
       }
     }
     if (query === 'reload') {
       await reloadConfig($, true)
+      await readInbox($, true)
+      await readArtifactLinks($, true)
       const cfg = await read($, loaded)
       return { text: cfg === null ? `No ${CONFIG} in this project.` : `Read ${cfg.commands.length} commands.` }
     }
-    const cfg = await read($, loaded)
-    if (cfg === null) return { text: `No ${CONFIG} in this project.` }
+    if (query === 'inbox') return { text: inboxText(await readInbox($, true), await read($, inboxMode)) }
+    if (query === 'artifacts') {
+      await readArtifactLinks($, true)
+      return { text: artifactsText(await read($, artifacts)) }
+    }
     if (query === '') {
       await openPane($)
-      return { text: 'Commands panel opened.' }
+      return { text: 'Firepit panel opened.' }
     }
+    const cfg = await read($, loaded)
+    if (cfg === null) return { text: `No ${CONFIG} in this project.` }
     const found = findCommands(cfg.commands, query)
     if (found.length === 1) return await runCommand($, found[0], false)
 
@@ -404,16 +711,20 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // The engine's own word on whether a turn runs; it outranks a turn.complete that never came.
+    if (!e.props.isWorking) activeTurns.clear()
     if (e.props.hasSurvey) return next(e)
     const cfg = await read($, loaded)
-    if (cfg === null || cfg.commands.length === 0) return next(e)
+    const messages = await read($, inbox)
+    const commands = cfg?.commands ?? []
+    if (commands.length === 0 && messages.length === 0) return next(e)
     const active = await read($, running)
     const trusted = await read($, isTrusted)
     const reviewing = await read($, isReviewing)
     const asking = await read($, confirming)
     const { Box, Text, Button } = $.ui.resolve(e)
 
-    if (!trusted && reviewing) {
+    if (cfg !== null && !trusted && reviewing) {
       return (
         <Box flexDirection="column">
           <Text color="warning" bold>
@@ -439,7 +750,7 @@ export const register: Register = on => {
       )
     }
 
-    const pending = asking === null ? undefined : cfg.commands.find(c => c.key === asking)
+    const pending = asking === null ? undefined : commands.find(c => c.key === asking)
     if (pending !== undefined) {
       return (
         <Box flexDirection="row" columnGap={1}>
@@ -451,7 +762,7 @@ export const register: Register = on => {
     }
 
     const button = (cmd: Cmd) => {
-      const isRunning = active.includes(unitFor(cmd, { projectId: cfg.projectId, nonce: '' }))
+      const isRunning = cfg !== null && active.includes(unitFor(cmd, { projectId: cfg.projectId, nonce: '' }))
       const isBlocked = cmd.warning !== null || (cmd.type === 'shell' && !trusted)
       return (
         <Button
@@ -474,15 +785,20 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="row" flexWrap="wrap" columnGap={3} rowGap={1}>
-        {!trusted && (
+        {messages.length > 0 && (
+          <Button key="inbox" variant="primary" onPress={() => fire($, openPane($))}>
+            Inbox {messages.length}
+          </Button>
+        )}
+        {cfg !== null && !trusted && commands.some(c => c.type === 'shell') && (
           <Button key="review" variant="primary" onPress={() => fire($, update($, isReviewing, () => true))}>
             Review commands
           </Button>
         )}
-        {sections(cfg.commands.filter(c => c.inBar)).map(section =>
+        {sections(commands.filter(c => c.inBar)).map(section =>
           groupRow(`group-${slug(section.group ?? section.items[0].key)}`, section.group, section.items.map(button)),
         )}
-        {/* Files and terminal live in the panel's head; the bar only leads there. */}
+        {/* Files, terminal, inbox and artifacts live in the panel; the bar only leads there. */}
         <Button key="panel" dimColor onPress={() => fire($, openPane($))}>panel</Button>
       </Box>
     )
@@ -491,22 +807,31 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Code } = $.ui.resolve(e)
     const cfg = await read($, loaded)
-    if (cfg === null) {
-      return <Text dimColor>No {CONFIG} in this project.</Text>
-    }
+    const root = cfg?.root ?? (await $.session.root())
+    const project = cfg?.projectId ?? root.split('/').filter(Boolean).pop() ?? 'project'
+    const commands = cfg?.commands ?? []
     const active = await read($, running)
     const trusted = await read($, isTrusted)
     const logKey = await read($, logsFor)
     const logText = await read($, logs)
     const details = await read($, showDetails)
-    const hasShell = cfg.commands.some(c => c.type === 'shell')
+    const messages = await read($, inbox)
+    const mode = await read($, inboxMode)
+    const allMessages = await read($, showAllMessages)
+    const links = await read($, artifacts)
+    const allLinks = await read($, showAllArtifacts)
+    const now = await $.clock.now()
+    const hasShell = commands.some(c => c.type === 'shell')
     // What runs is shown when asked for, and always while trust is pending.
     const isTechnical = details || (hasShell && !trusted)
-    const logCmd = logKey === null ? undefined : cfg.commands.find(c => c.key === logKey)
-    const grouped = sections(cfg.commands.map(c => (c.group === null ? { ...c, group: 'Other' } : c)))
+    const logCmd = logKey === null ? undefined : commands.find(c => c.key === logKey)
+    const grouped = sections(commands.map(c => (c.group === null ? { ...c, group: 'Other' } : c)))
+    const newestFirst = [...messages].reverse()
+    const shownMessages = allMessages ? newestFirst : newestFirst.slice(0, SHOWN)
+    const shownLinks = allLinks ? links : links.slice(0, SHOWN)
 
     const row = (cmd: Cmd) => {
-      const isRunning = active.includes(unitFor(cmd, { projectId: cfg.projectId, nonce: '' }))
+      const isRunning = cfg !== null && active.includes(unitFor(cmd, { projectId: cfg.projectId, nonce: '' }))
       const isBlocked = cmd.warning !== null || (cmd.type === 'shell' && !trusted)
       return (
         <Box key={`row-${cmd.key}`} flexDirection="column" paddingLeft={2}>
@@ -542,26 +867,79 @@ export const register: Register = on => {
       )
     }
 
+    const messageRow = (m: InboxMessage) => {
+      const k = hashKey(m.id)
+      return (
+        <Box key={`msg-${k}`} flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+          {m.priority === 'high' && <Text color="warning" bold>!</Text>}
+          <Button key={`msg-open-${k}`} onPress={() => fire($, viewMessage($, m))}>{m.subject}</Button>
+          <Text dimColor>
+            {m.from}
+            {m.sentAt !== null ? ` · ${ago(m.sentAt, now)}` : ''}
+          </Text>
+          <Button key={`msg-claude-${k}`} dimColor onPress={() => fire($, handOver($, m))}>Claude</Button>
+          <Button key={`msg-done-${k}`} dimColor onPress={() => fire($, completeMessage($, m))}>done</Button>
+        </Box>
+      )
+    }
+
+    const linkRow = (a: Artifact) => {
+      const k = hashKey(a.path)
+      return (
+        <Box key={`art-${k}`} flexDirection="column" paddingLeft={2}>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+            <Button key={`art-open-${k}`} dimColor={!a.exists} onPress={() => fire($, openArtifact($, a))}>
+              {a.label}
+            </Button>
+            {a.exists ? <Text dimColor>{a.kind}</Text> : <Text color="warning">missing</Text>}
+            {a.exists && (
+              <Button key={`art-folder-${k}`} dimColor onPress={() => fire($, showInFolder($, a.absolute))}>folder</Button>
+            )}
+            <Button key={`art-unpin-${k}`} dimColor onPress={() => fire($, unpin($, a))}>unpin</Button>
+          </Box>
+          {a.note !== null && <Text dimColor wrap="wrap">  {a.note}</Text>}
+          {(details || !a.exists) && <Text dimColor wrap="truncate-start">  {a.path}</Text>}
+        </Box>
+      )
+    }
+
+    const more = (key: string, total: number, isAll: boolean, toggle: () => Promise<unknown>) =>
+      total > SHOWN && (
+        <Box key={`${key}-row`} flexDirection="row" paddingLeft={2}>
+          <Button key={key} dimColor onPress={() => fire($, toggle())}>{isAll ? 'fewer' : `all ${total}`}</Button>
+        </Box>
+      )
+
     return (
       <Box flexDirection="column" rowGap={1}>
         <Box flexDirection="column">
           <Box flexDirection="row" columnGap={1}>
-            <Text bold>{cfg.projectId}</Text>
+            <Text bold>{project}</Text>
             <Text dimColor>v{VERSION}</Text>
             <Button key="p-files" dimColor onPress={() => fire($, openFiles($))}>files</Button>
             <Button key="p-terminal" dimColor onPress={() => fire($, openTerminal($))}>terminal</Button>
-            <Button key="p-reload" dimColor onPress={() => fire($, reloadConfig($, true))}>reload</Button>
+            <Button
+              key="p-reload"
+              dimColor
+              onPress={() => fire($, Promise.all([reloadConfig($, true), readInbox($, true), readArtifactLinks($, true)]))}
+            >
+              reload
+            </Button>
             <Button key="p-details" dimColor onPress={() => fire($, update($, showDetails, v => !v))}>
               {details ? 'hide details' : 'details'}
             </Button>
           </Box>
-          <Text dimColor wrap="truncate-start">{cfg.root}/{CONFIG}</Text>
-          {cfg.problems.map(p => (
+          {cfg !== null ? (
+            <Text dimColor wrap="truncate-start">{cfg.root}/{CONFIG}</Text>
+          ) : (
+            <Text dimColor wrap="wrap">No {CONFIG} here, so no commands.</Text>
+          )}
+          {(cfg?.problems ?? []).map(p => (
             <Text color="warning" wrap="wrap">⚠ {p}</Text>
           ))}
         </Box>
 
-        {!trusted && hasShell && (
+        {cfg !== null && !trusted && hasShell && (
           <Box flexDirection="column">
             <Text color="warning" bold wrap="wrap">
               Shell commands are new or changed. Nothing runs until you trust them; below each one is what it runs.
@@ -571,6 +949,29 @@ export const register: Register = on => {
             </Box>
           </Box>
         )}
+
+        <Box key="inbox" flexDirection="column">
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+            <Text bold>Inbox</Text>
+            <Text dimColor>{messages.length === 0 ? 'empty' : `${messages.length} pending`}</Text>
+            {messages.length > 1 && (
+              <Button key="inbox-all" dimColor onPress={() => fire($, handOver($, null))}>all to Claude</Button>
+            )}
+          </Box>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1} paddingLeft={2}>
+            <Text dimColor>new messages</Text>
+            {MODES.map(m =>
+              m.mode === mode ? (
+                <Button key={`mode-${m.mode}`} variant="primary" onPress={() => fire($, setMode($, m.mode))}>{m.label}</Button>
+              ) : (
+                <Button key={`mode-${m.mode}`} dimColor onPress={() => fire($, setMode($, m.mode))}>{m.label}</Button>
+              ),
+            )}
+            <Text dimColor wrap="wrap">{MODES.find(m => m.mode === mode)?.explains ?? ''}</Text>
+          </Box>
+          {shownMessages.map(messageRow)}
+          {more('inbox-more', messages.length, allMessages, () => update($, showAllMessages, v => !v))}
+        </Box>
 
         {logCmd !== undefined && (
           <Box flexDirection="column">
@@ -582,13 +983,74 @@ export const register: Register = on => {
           </Box>
         )}
 
-
         {grouped.map(section => (
           <Box key={`section-${slug(section.group ?? 'other')}`} flexDirection="column">
             <Text bold>{section.group}</Text>
             {section.items.map(row)}
           </Box>
         ))}
+
+        <Box key="artifacts" flexDirection="column">
+          <Box flexDirection="row" columnGap={1}>
+            <Text bold>Artifacts</Text>
+            <Text dimColor>{links.length === 0 ? 'none pinned' : `${links.length} pinned`}</Text>
+          </Box>
+          {shownLinks.map(linkRow)}
+          {more('art-more', links.length, allLinks, () => update($, showAllArtifacts, v => !v))}
+        </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: VIEWER }, async ($, e) => {
+    const { Box, Text, Button, Code, Markdown } = $.ui.resolve(e)
+    const shown = await read($, viewing)
+    if (shown === null) {
+      return <Text dimColor wrap="wrap">Nothing open. Pick a message or an artifact in the Firepit panel.</Text>
+    }
+
+    if (shown.kind === 'message') {
+      const m = shown.message
+      const facts = [
+        `from ${m.from}`,
+        m.sentAt !== null ? ago(m.sentAt, await $.clock.now()) : '',
+        m.priority !== 'normal' ? `${m.priority} priority` : '',
+      ].filter(Boolean)
+      return (
+        <Box flexDirection="column" rowGap={1}>
+          <Box flexDirection="column">
+            <Text bold wrap="wrap">{m.subject}</Text>
+            <Text dimColor>{facts.join(' · ')}</Text>
+            <Box flexDirection="row" columnGap={1}>
+              <Button key="v-claude" variant="primary" onPress={() => fire($, handOver($, m))}>Hand to Claude</Button>
+              <Button key="v-done" onPress={() => fire($, completeMessage($, m))}>Done</Button>
+              <Button key="v-back" dimColor onPress={() => fire($, backToPanel($))}>back</Button>
+            </Box>
+          </Box>
+          <Markdown text={shown.body === '' ? '(no text)' : shown.body} />
+        </Box>
+      )
+    }
+
+    const a = shown.artifact
+    return (
+      <Box flexDirection="column" rowGap={1}>
+        <Box flexDirection="column">
+          <Text bold wrap="wrap">{a.label}</Text>
+          {a.note !== null && <Text wrap="wrap">{a.note}</Text>}
+          <Text dimColor wrap="truncate-start">{a.path}</Text>
+          <Box flexDirection="row" columnGap={1}>
+            <Button key="v-open" onPress={() => fire($, openExternally($, a.absolute))}>Open</Button>
+            <Button key="v-folder" dimColor onPress={() => fire($, showInFolder($, a.absolute))}>folder</Button>
+            <Button key="v-back" dimColor onPress={() => fire($, backToPanel($))}>back</Button>
+          </Box>
+          {shown.isCut && <Text color="warning" wrap="wrap">Showing the start only; Open shows all of it.</Text>}
+        </Box>
+        {a.kind === 'markdown' ? (
+          <Markdown text={shown.text === '' ? '(empty)' : shown.text} />
+        ) : (
+          <Code source={shown.text} path={a.absolute} wrap="wrap" />
+        )}
       </Box>
     )
   })

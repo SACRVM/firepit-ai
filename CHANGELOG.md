@@ -50,6 +50,17 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   systemd user units, windowed ones in Konsole; shell commands wait for
   trust. The repository is a plugin marketplace pointing at the folder, so
   the installed mod is read from the working copy.
+- **The inbox and the artifacts in Claude Code**, in the same mod. Pending
+  messages show as *Inbox 3* in the bar and in the panel, each with its
+  sender and age; a message opens in a viewer with *Hand to Claude* and
+  *Done*. What arrives while a session is open is handed over once the
+  session is idle, as the Firepit shell did: *tell* (the default) has Claude
+  summarise and wait for a go, *act* has it do the work and report back,
+  *off* only shows it. The choice is per project. Pinned artifacts list
+  newest first; markdown and text open in the viewer, everything else in its
+  own program, *folder* selects the file in Dolphin, and dead links say so.
+  *Done* and *unpin* go through Firepit's MCP tools. The panel is now
+  *Firepit*; `/fire inbox` and `/fire artifacts` list both in the chat.
 - **Commands carry a `description` and a `bar` flag**; a group plus a short
   name reads as a phrase (*Git status*). Old `quickLinks` show as a `Links`
   group.
