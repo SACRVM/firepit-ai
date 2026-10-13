@@ -9,6 +9,7 @@ const CONFIG = JSON.stringify({
     { name: 'Site', description: 'Serves the site.', type: 'shell', group: 'Run', command: 'python3', args: ['-m', 'http.server'], window: 'reuse:site', longRunning: true },
     { name: 'Clean', type: 'shell', command: 'rm', args: ['-rf', 'output'], confirm: true },
     { name: 'Ask', type: 'claude-prompt', prompt: 'Summarize.' },
+    { name: 'status', group: 'Git', type: 'shell', command: 'git', args: ['status'], window: 'inline' },
   ],
 })
 
@@ -31,6 +32,7 @@ function world(on: On, ran: Ran, submitted: string[]) {
   on('fs.read', () => ({ value: CONFIG }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }))
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => {
     store.set(e.key, e.value)
@@ -39,7 +41,8 @@ function world(on: On, ran: Ran, submitted: string[]) {
   on('env.get', (_$, e) => ({ value: e.name === 'PATH' ? '/usr/bin' : undefined }))
   on('process.run', (_$, e) => {
     ran.push([...e.argv])
-    return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const stdout = e.argv[0] === 'git' ? '## main...origin/main\n?? new.txt' : ''
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('prompt.submit', (_$, e) => {
     submitted.push(e.text)
@@ -107,11 +110,26 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on, [], [])
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit-commands 0.2.0')
+  expect(before.text).toContain('firepit-commands 0.3.0')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
-  expect(trusted.text).toContain('Trusted 2 shell commands:')
+  expect(trusted.text).toContain('Trusted 3 shell commands:')
   expect(trusted.text).toContain('run site — python3 -m http.server')
   const after = await $.command.run({ command: 'fire', args: 'status' })
   expect(after.text).toContain('trusted: yes')
+})
+
+test('an inline command answers in the chat, and Claude gets the output too', async ($, on) => {
+  const ran: Ran = []
+  world(on, ran, [])
+  await $.command.run({ command: 'fire', args: 'reload' })
+  await $.command.run({ command: 'fire', args: 'trust' })
+
+  const result = await $.command.run({ command: 'fire', args: 'git status' })
+
+  expect(result.text).toContain('git status · done')
+  expect(result.text).toContain('?? new.txt')
+  expect(result.context?.[0]).toContain('"git status" (git status)')
+  expect(result.context?.[0]).toContain('?? new.txt')
+  expect(ran.some(argv => argv[0] === 'git')).toBe(true)
 })

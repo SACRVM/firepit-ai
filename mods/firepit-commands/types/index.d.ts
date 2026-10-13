@@ -39,12 +39,6 @@ export type Loaded = {
   hash: string
 }
 
-export type Output = {
-  title: string
-  exitCode: number | null
-  text: string
-}
-
 declare module 'claude-code' {
   interface PluginState {
     'firepit-commands': {
@@ -53,7 +47,6 @@ declare module 'claude-code' {
       isTrusted: boolean
       isReviewing: boolean
       confirming: string | null
-      output: Output | null
       logsFor: string | null
       logs: string
       showDetails: boolean

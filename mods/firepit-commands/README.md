@@ -18,8 +18,10 @@ Run: site ticker   Build: app broken   Git: status repo   …   panel
   loaded and what runs, `/fire reload` rereads the config.
 
 How commands run on Linux: long-running ones as systemd user units
-(`firepit-<project>-<id>`, logs in the journal), windowed ones in Konsole,
-`inline` ones in the background with their output in the panel. Shell
+(`firepit-<project>-<id>`, logs in the panel and the journal), windowed ones
+in Konsole, `inline` ones in the background — their output comes back as a
+row in the chat, the last 60 lines with the exit code, and Claude gets it as
+context the way it gets a `!` command's output. Shell
 commands run only after their exact command lines were trusted; a change to
 any of them asks again. The patterns are in
 `../../../firepit-template/.firepit/config.json`.

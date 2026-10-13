@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Cmd, Loaded, Output } from '../types'
+import type { Cmd, Loaded } from '../types'
 import {
   findCommands,
   inlineArgv,
@@ -21,7 +21,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.2.0'
+const VERSION = '0.3.0'
 const PANE = 'firepit-commands'
 const CONFIG = '.firepit/config.json'
 
@@ -30,7 +30,6 @@ const running = atom({ plugin: 'firepit-commands', key: 'running' } as const, []
 const isTrusted = atom({ plugin: 'firepit-commands', key: 'isTrusted' } as const, false)
 const isReviewing = atom({ plugin: 'firepit-commands', key: 'isReviewing' } as const, false)
 const confirming = atom({ plugin: 'firepit-commands', key: 'confirming' } as const, null)
-const output = atom({ plugin: 'firepit-commands', key: 'output' } as const, null)
 const logsFor = atom({ plugin: 'firepit-commands', key: 'logsFor' } as const, null)
 const logs = atom({ plugin: 'firepit-commands', key: 'logs' } as const, '')
 const showDetails = atom({ plugin: 'firepit-commands', key: 'showDetails' } as const, false)
@@ -151,77 +150,121 @@ async function showLogs($: $, cmd: Cmd): Promise<void> {
   await openPane($)
 }
 
-async function setOutput($: $, value: Output): Promise<void> {
-  await update($, output, () => value)
+/** What a run tells the person (a transcript row) and, optionally, Claude. */
+type RunResult = { text: string; context?: string[] }
+
+// A confirmation given in the bar, for the one run it was given for. Module
+// state is fine here: a hot reload in between only means asking again.
+const confirmedOnce = new Set<string>()
+
+const OUTPUT_LINES_SHOWN = 60
+const OUTPUT_CHARS_FOR_CLAUDE = 20000
+
+function tailLines(text: string, count: number): string {
+  const lines = text.split('\n')
+  return lines.length <= count
+    ? text
+    : [`… ${lines.length - count} earlier lines`, ...lines.slice(-count)].join('\n')
 }
 
-/** Runs one command; resolves what happened, in words `/fire` can print. */
-async function runCommand($: $, cmd: Cmd, isConfirmed: boolean): Promise<string> {
+/**
+ * Runs a command from a button. An inline command goes through `/fire`, so
+ * its output lands in the chat as a command row — and in Claude's context,
+ * as a `!` command's would — instead of in a side panel.
+ */
+async function pressCommand($: $, cmd: Cmd, isConfirmed: boolean): Promise<void> {
+  if (cmd.type === 'shell' && cmd.window === 'inline') {
+    if (isConfirmed) confirmedOnce.add(cmd.key)
+    await update($, confirming, () => null)
+    await $.command.run({ command: 'fire', args: phraseOf(cmd).toLowerCase() })
+    return
+  }
+  await runCommand($, cmd, isConfirmed)
+}
+
+/** Runs one command; resolves what happened, as `/fire` prints it. */
+async function runCommand($: $, cmd: Cmd, isConfirmed: boolean): Promise<RunResult> {
   const cfg = await read($, loaded)
-  if (cfg === null) return `No ${CONFIG} in this project.`
+  if (cfg === null) return { text: `No ${CONFIG} in this project.` }
+  const label = phraseOf(cmd).toLowerCase()
 
   if (cmd.warning !== null) {
-    const text = `${phraseOf(cmd).toLowerCase()}: ${cmd.warning} — fix it in ${CONFIG}`
+    const text = `${label}: ${cmd.warning} — fix it in ${CONFIG}`
     $.ui.toast(text)
-    return text
+    return { text }
   }
   if (cmd.type === 'shell' && !(await read($, isTrusted))) {
     // The band turns into the review; trusting there runs nothing by itself.
     await update($, isReviewing, () => true)
-    return `${phraseOf(cmd).toLowerCase()}: not run. Review the project commands above the prompt and trust them first.`
+    return { text: `${label}: not run. Review the project commands above the prompt and trust them first.` }
   }
-  if (cmd.confirm && !isConfirmed) {
+  if (cmd.confirm && !isConfirmed && !confirmedOnce.delete(cmd.key)) {
     await update($, confirming, () => cmd.key)
-    return `${phraseOf(cmd).toLowerCase()}: confirm above the prompt.`
+    return { text: `${label}: confirm above the prompt.` }
   }
   await update($, confirming, () => null)
 
   if (cmd.type === 'claude-prompt') {
     await $.prompt.submit({ text: cmd.prompt ?? '', asUser: true })
-    return `${phraseOf(cmd).toLowerCase()}: sent to Claude.`
+    return { text: `${label}: sent to Claude.` }
   }
   if (cmd.type === 'url') {
     const opened = await $.process.run(['xdg-open', cmd.url ?? ''], { timeoutMs: 15000 }).catch(() => undefined)
     if (opened === undefined || opened.exitCode !== 0) {
       $.ui.toast(`Could not open ${cmd.url}`)
-      return `${phraseOf(cmd).toLowerCase()}: could not open ${cmd.url}`
+      return { text: `${label}: could not open ${cmd.url}` }
     }
-    return `${phraseOf(cmd).toLowerCase()}: opened ${cmd.url}`
+    return { text: `${label}: opened ${cmd.url}` }
   }
 
   const env: Record<string, string> = { FIREPIT_PROJECT_NAME: cfg.projectId }
   for (const [k, v] of Object.entries(cmd.env)) if (v !== null) env[k] = v
 
   if (cmd.window === 'inline') {
-    await setOutput($, { title: phraseOf(cmd).toLowerCase(), exitCode: null, text: 'Running…' })
-    await openPane($)
-    const result = await $.process
-      .run(inlineArgv(cmd), { cwd: resolveCwd(cfg.root, cmd.cwd), env, timeoutMs: 600000 })
-      .catch((error: unknown) => ({ exitCode: null, stdout: '', stderr: error instanceof Error ? error.message : String(error) }))
-    const text = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter(Boolean).join('\n') || '(no output)'
-    await setOutput($, { title: phraseOf(cmd).toLowerCase(), exitCode: result.exitCode, text })
-    return `${phraseOf(cmd).toLowerCase()}: ${result.exitCode === 0 ? 'done' : `exit ${result.exitCode ?? '?'}`}, output in the panel.`
+    const cwd = resolveCwd(cfg.root, cmd.cwd)
+    $.ui.status(`▶ ${label} …`)
+    let result: { exitCode: number | null; stdout: string; stderr: string }
+    try {
+      result = await $.process
+        .run(inlineArgv(cmd), { cwd, env, timeoutMs: 600000 })
+        .catch((error: unknown) => ({ exitCode: null, stdout: '', stderr: error instanceof Error ? error.message : String(error) }))
+    } finally {
+      $.ui.status(undefined)
+    }
+    const output = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter(Boolean).join('\n') || '(no output)'
+    const status = result.exitCode === 0 ? 'done' : `exit ${result.exitCode ?? '?'}`
+    return {
+      text: `${label} · ${status}\n${tailLines(output, OUTPUT_LINES_SHOWN)}`,
+      // What `!` gives Claude for a shell command the person ran: it can
+      // act on a failing test without being pasted the output.
+      context: [
+        `The user ran the project command "${label}" (${[cmd.command ?? '', ...cmd.args].join(' ')}) ` +
+          `in ${cwd}; it finished with ${status}. Its output` +
+          (output.length > OUTPUT_CHARS_FOR_CLAUDE ? ` (last ${OUTPUT_CHARS_FOR_CLAUDE} characters)` : '') +
+          `:\n${output.slice(-OUTPUT_CHARS_FOR_CLAUDE)}`,
+      ],
+    }
   }
 
   launches += 1
   const ctx = { root: cfg.root, projectId: cfg.projectId, desktopEnv: await desktopEnv($), nonce: `${Date.now().toString(36)}${launches}` }
   const unit = unitFor(cmd, ctx)
   if ((cmd.longRunning || reuseId(cmd.window) !== null) && (await read($, running)).includes(unit)) {
-    $.ui.toast(`${phraseOf(cmd).toLowerCase()} is already running.`)
-    return `${phraseOf(cmd).toLowerCase()} is already running.`
+    $.ui.toast(`${label} is already running.`)
+    return { text: `${label} is already running.` }
   }
   const started = await $.process.run(launchArgv(cmd, ctx), { timeoutMs: 15000 }).catch(() => undefined)
   if (started === undefined || started.exitCode !== 0) {
-    const text = `${phraseOf(cmd).toLowerCase()} did not start: ${started?.stderr.trim() || 'systemd-run failed'}`
+    const text = `${label} did not start: ${started?.stderr.trim() || 'systemd-run failed'}`
     $.ui.toast(text)
-    return text
+    return { text }
   }
   if (cmd.longRunning) {
     await update($, running, prev => (prev.includes(unit) ? prev : [...prev, unit]))
-    $.ui.toast(`${phraseOf(cmd).toLowerCase()} started.`)
-    return `${phraseOf(cmd).toLowerCase()}: started, logs in the panel.`
+    $.ui.toast(`${label} started.`)
+    return { text: `${label}: started, logs in the panel.` }
   }
-  return `${phraseOf(cmd).toLowerCase()}: opened in Konsole.`
+  return { text: `${label}: opened in Konsole.` }
 }
 
 async function stopCommand($: $, cmd: Cmd): Promise<void> {
@@ -277,7 +320,7 @@ function technical(cmd: Cmd): string {
   if (cmd.type === 'claude-prompt') return `sends to Claude: ${cmd.prompt ?? ''}`
   if (cmd.type === 'url') return `opens ${cmd.url ?? ''}`
   const flags = [
-    cmd.window === 'inline' ? 'output in this panel' : null,
+    cmd.window === 'inline' ? 'output in the chat' : null,
     cmd.longRunning ? 'keeps running' : null,
     reuseId(cmd.window) !== null && !cmd.longRunning ? 'one at a time' : null,
     cmd.keepOpenOnError ? 'window stays open on error' : null,
@@ -340,7 +383,7 @@ export const register: Register = on => {
       return { text: 'Commands panel opened.' }
     }
     const found = findCommands(cfg.commands, query)
-    if (found.length === 1) return { text: await runCommand($, found[0], false) }
+    if (found.length === 1) return await runCommand($, found[0], false)
 
     const group = cfg.commands.filter(c => c.group?.toLowerCase() === query.toLowerCase())
     if (group.length > 0) {
@@ -391,7 +434,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="row" columnGap={1}>
           <Text color="warning">Run {phraseOf(pending).toLowerCase()}?</Text>
-          <Button key="confirm-run" label="Run" variant="primary" onPress={() => fire($, runCommand($, pending, true))} />
+          <Button key="confirm-run" label="Run" variant="primary" onPress={() => fire($, pressCommand($, pending, true))} />
           <Button key="confirm-cancel" label="Cancel" onPress={() => fire($, update($, confirming, () => null))} />
         </Box>
       )
@@ -404,7 +447,7 @@ export const register: Register = on => {
         <Button
           key={`cmd-${cmd.key}`}
           dimColor={isBlocked}
-          onPress={() => fire($, isRunning && cmd.longRunning ? showLogs($, cmd) : runCommand($, cmd, false))}
+          onPress={() => fire($, isRunning && cmd.longRunning ? showLogs($, cmd) : pressCommand($, cmd, false))}
         >
           {cmd.name}
           {isRunning ? <Text color="success"> ●</Text> : ''}
@@ -443,7 +486,6 @@ export const register: Register = on => {
     }
     const active = await read($, running)
     const trusted = await read($, isTrusted)
-    const last = await read($, output)
     const logKey = await read($, logsFor)
     const logText = await read($, logs)
     const details = await read($, showDetails)
@@ -462,7 +504,7 @@ export const register: Register = on => {
             <Button
               key={`run-${cmd.key}`}
               dimColor={isBlocked}
-              onPress={() => fire($, isRunning && cmd.longRunning ? showLogs($, cmd) : runCommand($, cmd, false))}
+              onPress={() => fire($, isRunning && cmd.longRunning ? showLogs($, cmd) : pressCommand($, cmd, false))}
             >
               {cmd.name}
             </Button>
@@ -530,18 +572,6 @@ export const register: Register = on => {
           </Box>
         )}
 
-        {last !== null && (
-          <Box flexDirection="column">
-            <Box flexDirection="row" columnGap={1}>
-              <Text bold>Output · {last.title}</Text>
-              <Text color={last.exitCode === null ? 'inactive' : last.exitCode === 0 ? 'success' : 'error'}>
-                {last.exitCode === null ? 'running' : `exit ${last.exitCode}`}
-              </Text>
-              <Button key="output-close" dimColor onPress={() => fire($, update($, output, () => null))}>hide</Button>
-            </Box>
-            <Code source={last.text} wrap="wrap" />
-          </Box>
-        )}
 
         {grouped.map(section => (
           <Box key={`section-${slug(section.group ?? 'other')}`} flexDirection="column">
