@@ -27,9 +27,19 @@
     },
 
     {
+      "group": "Install",
+      "name": "service",
+      "description": "Publishes firepitd and firepit-mcp and restarts the service.",
+      "type": "shell",
+      "command": "bash",
+      "args": ["scripts/install-linux.sh"],
+      "keepOpenOnError": true
+    },
+
+    {
       "group": "Test",
       "name": "all",
-      "description": "Runs every test project; the summary lands in the panel.",
+      "description": "Runs every test project; the result lands in the chat.",
       "type": "shell",
       "command": "dotnet",
       "args": ["test", "Firepit.slnx"],

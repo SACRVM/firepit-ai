@@ -1,5 +1,5 @@
 ---
-description: Bump Firepit version, tag, push — ci.yml then publishes the single-file Firepit.exe and the Inno installer to the GitHub Release.
+description: Bump the Firepit version, update the changelog, tag, push, publish the GitHub release and reinstall the service on this machine.
 argument-hint: [test|patch|minor|major|<x.y.z>]
 ---
 
@@ -7,140 +7,118 @@ argument-hint: [test|patch|minor|major|<x.y.z>]
 
 You are cutting a Firepit release. Follow these steps **exactly**, in order.
 **Never skip the confirmation step.** Speak to SACRVM in German; commit
-messages and tag names stay English.
+messages, tag names and release notes stay English.
 
-The release pipeline produces two artifacts from a single `v*` tag push:
+A release is a `v*` tag on `main`, a GitHub release whose notes are the
+changelog section, and the new build installed on this machine. CI only
+builds and tests; nothing is uploaded.
 
-1. `firepit-vX.Y.Z-win-x64.zip` — the published `bin/win-x64/` folder zipped.
-2. `FirepitSetup-X.Y.Z-win-x64.exe` — Inno Setup installer (built in CI by ISCC).
-
-Both attach to the GitHub Release the workflow creates from the tag.
+The service and the bridge share one version: `<Version>` in
+`src/Firepit.Daemon/Firepit.Daemon.csproj` and in
+`tools/firepit-mcp/Firepit.Mcp.Bridge.csproj`. The commands mod
+(`mods/firepit-commands`) has its own version in `plugin.json` and `VERSION`
+in `hooks/register.tsx`; it changes when the mod changes, not here.
 
 ## Argument
 
 `$ARGUMENTS` is one of:
-- (empty) — auto-detect bump from commits since the last tag
-- `test` — dry-run: print the plan, do nothing
+- (empty) — work the bump out from the commits since the last tag
+- `test` — dry run: show the plan, change nothing
 - `patch` / `minor` / `major` — force that bump
-- `0.2.0` (or any `X.Y.Z`) — set this exact version
+- `X.Y.Z` — use this version
 
 ## Step 1 — Sanity checks
 
-Run all four. If any fails, stop and report to SACRVM — do not proceed.
+Stop and tell SACRVM if any of these fails.
 
 ```bash
-git rev-parse --abbrev-ref HEAD                                    # must be 'main'
-test -z "$(git status --porcelain)" && echo clean || echo dirty    # must be 'clean'
+git rev-parse --abbrev-ref HEAD                                    # main
+test -z "$(git status --porcelain)" && echo clean || echo dirty    # clean
 git fetch origin main --quiet
-test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && echo synced || echo behind  # must be 'synced'
-test -f src/Firepit/Firepit.csproj && echo found || echo missing   # must be 'found'
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" && echo synced || echo behind
+gh auth status                                                     # logged in
 ```
 
-## Step 2 — Determine current state
+## Step 2 — Current state
 
 ```bash
-git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo v0.0.0   # last v* tag
-grep -oP '(?<=<Version>)[^<]+' src/Firepit/Firepit.csproj                # csproj version
-git log $(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo)..HEAD --format='%s'  # commits since last tag
+git describe --tags --match 'v*' --abbrev=0
+grep -oP '(?<=<Version>)[^<]+' src/Firepit.Daemon/Firepit.Daemon.csproj
+git log "$(git describe --tags --match 'v*' --abbrev=0)"..HEAD --format='%s'
 ```
 
-If `git describe` finds no tag, treat last tag as `v0.0.0` and analyze all commits since the start.
-
-## Step 3 — Decide the bump
-
-Parse `$ARGUMENTS`:
+## Step 3 — The bump
 
 | Arg | Action |
 |---|---|
-| empty | classify commits: any `feat:` or `V1.x:` introducing user-visible features → **minor**; only `fix:`/`build:`/`chore:` → **patch**; only `docs:`/`refactor:`/`test:` → **nothing to release**, stop here |
-| `test` | same classification as empty, but stop after the plan in Step 4 |
-| `patch` | force Z+1 |
-| `minor` | force Y+1, Z=0 |
-| `major` | force X+1, Y=0, Z=0 (pre-1.0 — confirm twice; usually wrong) |
-| `X.Y.Z` | use literally — must be greater than current |
+| empty | any `feat` commit → **minor**; only `fix`/`build`/`chore` → **patch**; only `docs`/`refactor`/`test` → nothing to release, stop |
+| `test` | as empty, then stop after Step 4 |
+| `patch` / `minor` / `major` | force it (`major` before 1.0: confirm twice) |
+| `X.Y.Z` | use it; must be greater than the current version |
 
-Compute `new_version` from the **csproj `<Version>`** (not from the tag — they may differ if a previous release wasn't tagged or vice versa).
+Work from the csproj version, not the tag.
 
-## Step 4 — Show the plan, ask for confirmation
+## Step 4 — Plan and confirmation
 
-Print to SACRVM in German, exactly like:
+Show SACRVM, in German: last tag, current version, the commits grouped by
+prefix, the proposed bump, the new version and tag, and the `[Unreleased]`
+section of `CHANGELOG.md` that becomes the release notes.
 
-```
-Letzter Tag:           v0.1.0
-Firepit.csproj <Version>: 0.1.0
-Commits seit Tag:      12 (3 V1.x feature, 4 fix, 5 chore/docs/etc.)
-Vorgeschlagener Bump:  minor (weil V1.x feature commits drin sind)
-Neue Version:          0.2.0
-Neuer Tag:             v0.2.0
-```
+`test`: stop here and say „Trockenlauf — nichts geändert."
 
-Then list the commits since the last tag, grouped by prefix (V1.x / feat / fix / chore / docs / refactor / build / other), as a sanity check.
+Otherwise ask **„OK so? [j/n]"**. Only `j`, `ja`, `y` or `yes` continues.
 
-**If `$ARGUMENTS` is `test`: stop here. Do not change any files. Tell SACRVM „Trockenlauf — nichts geändert."**
+## Step 5 — Version and changelog
 
-Otherwise: ask **„OK so? [j/n]"** and wait for her answer.
-- `j` / `ja` / `y` / `yes` → continue to Step 5
-- anything else → abort, change nothing
+- `<Version>OLD</Version>` → `<Version>NEW</Version>` in both csproj files.
+  Touch no other field.
+- In `CHANGELOG.md`, rename `## [Unreleased]` to `## [NEW] — YYYY-MM-DD`
+  (today) and put a fresh, empty `## [Unreleased]` above it.
 
-## Step 5 — Bump csproj version
-
-Edit `src/Firepit/Firepit.csproj`: change `<Version>OLD</Version>` to `<Version>NEW</Version>`. Use the Edit tool with the full surrounding `<Version>…</Version>` string for uniqueness.
-
-Do the same in `tools/firepit-mcp/Firepit.Mcp.Bridge.csproj` — the bridge exe
-carries its own version resource, and a stale one makes `firepit-mcp.exe`
-report a different version than the MCP handshake does.
-
-Also update the installer fallback in `installer/firepit.iss`:
-
-```
-#ifndef AppVersion
-  #define AppVersion "NEW"
-#endif
-```
-
-(CI overrides this via `/DAppVersion`, but keeping the fallback in sync means a local ISCC run also picks up the right number.)
-
-## Step 6 — Sanity build
+## Step 6 — Gate
 
 ```bash
-dotnet build Firepit.slnx --configuration Release --nologo
+dotnet build Firepit.slnx -c Release --nologo
+dotnet test Firepit.slnx --nologo
 ```
 
-Catches compile errors locally before the tag goes out. If it fails, **stop**, show the error to SACRVM, leave the working tree as-is so she can inspect — do not commit, do not tag, do not push.
+On a failure: stop, show it, leave the tree as it is. No commit, no tag.
 
-(The release workflow runs `dotnet test` on the runner, so we skip the test pass here for speed. If she wants the full gate locally, she can run `dotnet test` manually before invoking `/release`.)
+## Step 7 — Commit, tag, push, release
 
-## Step 7 — Commit, tag, push
+Commit with the repository's `Co-Authored-By` trailer, then:
 
 ```bash
-git add src/Firepit/Firepit.csproj tools/firepit-mcp/Firepit.Mcp.Bridge.csproj installer/firepit.iss
-git commit -m "release: vNEW"
 git tag vNEW
 git push origin main
 git push origin vNEW
 ```
 
-Use the standard commit-message HEREDOC pattern; include the `Co-Authored-By` trailer per repo convention.
+Write the new changelog section to a file in your scratchpad, then:
 
-## Step 8 — Hand off
-
-Tell SACRVM in German:
-
-```
-Release vNEW ist raus.
-- Tag gepusht → ci.yml release-Job läuft
-- Single-file Firepit.exe (~160 MB) wird publishd, gezippt und an Release angehängt
-- Inno Setup installer wird via choco+ISCC gebaut und ebenfalls angehängt
-- GitHub Release wird automatisch erstellt mit auto-generated release notes
-- CI-Status: https://github.com/SACRVM/firepit-ai/actions
+```bash
+gh release create vNEW --title "vNEW" --notes-file <that file>
 ```
 
-Do **not** poll or wait for the CI run — just hand off.
+## Step 8 — Install here
+
+```bash
+scripts/install-linux.sh
+journalctl --user -u firepit -n 5 --no-pager
+```
+
+The start line (`firepitd NEW starting`) must show the new version.
+
+## Step 9 — Hand off
+
+Tell SACRVM in German: the version, the release link, and that the service
+on this machine runs it. Do not poll CI.
 
 ## Hard rules
 
-- Never push tags without Step 4 confirmation.
-- Never use `--no-verify` or `--force` on any git command.
-- Never touch `.csproj` fields other than `<Version>`.
-- The `/release` invocation is the explicit user authorization for the tag push and the public GitHub Release that follows.
-- If anything is unclear or smells wrong (e.g., no commits since last tag, csproj/tag version mismatch, weird state), stop and ask SACRVM instead of guessing.
+- No tag push without the Step 4 confirmation.
+- Never `--force`, never `--no-verify`, never move or delete a tag.
+- The `/release` invocation is SACRVM's authorization for the tag push and
+  the public GitHub release; nothing else is.
+- Anything unclear (no commits since the last tag, the version and the tag
+  disagree, a dirty tree): stop and ask instead of guessing.

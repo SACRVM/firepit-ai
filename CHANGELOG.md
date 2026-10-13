@@ -9,9 +9,21 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 - **main is Linux-first.** v0.30.0 is the last Windows release; the WPF
   shell, the WebView2 terminal and the Inno installer stay on the
-  `windows-legacy` branch. On `main` they are out of the solution, CI runs on
-  ubuntu-latest, and the plan for what comes next is `docs/LINUX.md`:
-  Claude Code desktop as the UI, Firepit as the platform behind it.
+  `windows-legacy` branch. CI runs on ubuntu-latest, and the decision record
+  is `docs/LINUX.md`: Claude Code desktop as the UI, Firepit as the platform
+  behind it.
+- **The docs describe the platform.** README, SPEC, `docs/ARCHITECTURE.md`
+  and CLAUDE.md are rewritten for firepitd, the bridge and the mod; the V1
+  roadmap and design notes stay on `windows-legacy`.
+- **What every session is told matches what it gets.** The MCP server
+  instructions, the tool descriptions, the `CLAUDE.md` artifacts section and
+  the `.firepit/config.json` scaffold no longer describe tabs, a paperclip
+  pane or Windows options. They describe the Firepit panel, inline output in
+  the chat, groups and descriptions. Without a shell the tab tools and the
+  sessions resource are left out of the lists.
+- **`/release` cuts a Linux release**: both versions, the changelog
+  section, the tag, a GitHub release with those notes, and the service
+  reinstalled here.
 - **The libraries build and pass on Linux.** Core, Adapters, Knowledge,
   Process and the MCP host target plain `net10.0`; 512 tests pass, four facts
   about Windows behaviour run only there.
@@ -19,7 +31,23 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   logs and indexes in `~/.local/share/firepit`, sockets in
   `$XDG_RUNTIME_DIR/firepit`. Windows paths are unchanged.
 
+### Removed
+
+- **The Windows shell left `main`**: `src/Firepit` (WPF), `src/Firepit.Web`
+  (WebView2 and xterm.js), the Inno installer, `run.ps1`, the icon script and
+  `/run`. All of it is on `windows-legacy`.
+
 ### Fixed
+
+- **Changing one command through the tools no longer strips the others.**
+  `firepit_add_command` and `firepit_remove_command` rewrite
+  `.firepit/config.json`, and the rewrite dropped `description` and `bar`
+  from every command, since the model did not know them. It does now, and
+  `add_command` takes both. It also passes `group` and `keepOpenOnError`
+  through, which it listed but ignored.
+- **Commands are unique by group and name.** "Build debug" and "Run debug"
+  are two commands: adding one no longer replaces the other, and removing a
+  name two groups share asks for the group.
 
 - **Knowledge pointers written on Windows resolve everywhere.** 21 of 22
   pointer files say `..\..\.firepit\projects\…`; on Linux a backslash is a

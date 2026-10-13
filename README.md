@@ -1,102 +1,213 @@
 # Firepit
 
-> *Summon your agents.*
+> *Where your agents gather.*
 
-A local, personal workspace for AI coding agents. Tabs, status indicators, and a project switcher around the CLI tools you already use — without dragging you into a cloud or an editor.
+Firepit is the platform behind Claude Code for people who keep many projects
+on one machine. It is a small user service that every Claude Code session can
+reach, in the desktop app or the CLI and in any project. Through it, sessions
+share one knowledge base, send each other messages from project to project, pin
+the files they produce, run scheduled jobs, and keep each repository's Claude
+setup in step with a blueprint. A Claude Code mod adds each project's commands,
+inbox and artifacts to the Claude Code window.
 
-> **Status: V1 feature-complete + V0.5.x platform layer in daily-driver use.** Latest release: `v0.5.17` — see [`CHANGELOG.md`](./CHANGELOG.md). The v0.5 line added per-project `.firepit/` config, the Firepit MCP server, a hidden meta-project, cross-Claude inbox, lazy tab restore, keyboard shortcuts, window placement persistence, and scheduled jobs.
+Everything lives in plain files in your repositories and under `$HOME`.
+There is no cloud service, no account and no window of its own: Claude Code is
+the interface.
 
----
+> **Status:** Linux-first. Built and used on CachyOS with KDE Plasma 6 on
+> Wayland. Firepit started as a Windows terminal shell. That shell ended at
+> v0.30.0 and lives on the [`windows-legacy`](https://github.com/SACRVM/firepit-ai/tree/windows-legacy)
+> branch; what it had grown underneath is what Firepit is now. See
+> [History](#history).
 
-## What it is
+## How it fits together
 
-You're running Claude Code (or Aider, or another agent CLI) across three PowerShell windows on two monitors. You can't remember which one is doing what. Firepit fixes that with a native Windows shell that hosts your agent sessions in tabs, shows you which one is *burning* vs *embers* vs *out*, and gives you a one-click toolbar for the things you constantly need.
-
-It is **not** a cloud orchestrator. It is **not** an IDE. It is a console workspace with manners.
-
-## What it isn't
-
-- A VS Code extension
-- An Electron app
-- A team / enterprise governance tool (see GitHub's Agent HQ for that layer — Firepit is the local, personal tier)
-- macOS or Linux (V1 is Windows-only)
-
-## Features
-
-### V1 core
-- **Project list** — auto-discovered from a configurable root directory; folders qualify by containing `CLAUDE.md` or `.claude/`, plus manual entries. The `.firepit` meta-project always pins to top
-- **Tabs** — one per active session, drag-to-reorder, terminal search (`Ctrl+Shift+F`), right-click context menu (Close / Close others / Close all)
-- **Activity indicator** — *cold* / *igniting* / *burning* / *embers* / *out* per tab, driven by PTY traffic plus Claude Code's `OSC 9;4` thinking signal
-- **Toolbar** — Rekindle, Resume Last, Open in Explorer, Open external shell, Configure, plus per-project quick-link buttons and custom commands
-- **MCP server registry ("kindling")** — global catalog of MCP servers, activated per project with optional argument / env / header overrides
-- **Secret references** — `${env:NAME}` and `${cred:firepit/<key>}` (Windows Credential Manager) tokens resolved at session-start time; raw secrets never sit in `settings.json`
-- **Single-instance** — second launch focuses the existing window via a named pipe
-- **Lazy tab restore** — on relaunch, only the tab you last had focused starts its session. Click any other tab to wake it up. Cuts cold-start cost roughly in proportion to tab count
-- **Window placement** — position, size, and maximized state persist across restarts (off-screen rects ignored)
-- **Keyboard shortcuts** — `Ctrl+Shift+T` open project picker, `Ctrl+Shift+W` close tab, `Ctrl+Tab`/`Ctrl+Shift+Tab` and `Ctrl+PgDn`/`Ctrl+PgUp` cycle, `Ctrl+Alt+1..9` jump. Shift-prefixed variants intentionally avoid stomping on bash readline inside the terminal
-
-### V0.5.0 platform layer
-- **`.firepit/config.json` per project** — quick-links, MCP activations, agent overrides travel with your repo; gitignore at your discretion
-- **Firepit MCP server** — Claude Code can talk to Firepit via `firepit_*` tools and `firepit://*` resources (settings auto-redacted). Bridge ships as `firepit-mcp.exe` next to `Firepit.exe`
-- **`.firepit` central project** — first-launch prompt seeds a hidden meta-project where Claude has the firepit MCP wired up out of the box; cross-project notes + inbox live here
-- **Cross-Claude inbox** — `firepit_send_to(toProject, …)` drops a message into another project's inbox; the receiving tab shows an unread badge
-- **Custom commands** — toolbar buttons defined in `.firepit/config.json`, three types: shell-exec, claude-prompt-injection, url-open
-- **Icon flexibility** — 28 bundled named icons + inline SVG path-data fallback (`"icon": "M2 2L10 10z"`)
-
-## Stack
-
-.NET 10 · WPF · WebView2 + xterm.js · ConPTY (via Porta.Pty). Native Windows app, no Electron, no Node runtime at runtime (npm only at build time for the xterm.js bundle).
-
-## Building
-
-Requires the .NET 10 SDK and Node.js (for the xterm.js bundle).
-
-```powershell
-dotnet build Firepit.slnx
-dotnet test  Firepit.slnx
-dotnet run   --project src/Firepit
+```
+Claude Code (desktop app, CLI): one session per project
+ ├─ firepit-commands mod ─ bar · panel · /fire: commands, inbox, artifacts
+ └─ MCP server "firepit" ─ firepit-mcp, a stdio bridge
+                             │  Unix socket, $XDG_RUNTIME_DIR/firepit/mcp.sock
+                             ▼
+                    firepitd, a systemd user service
+                    projects · knowledge index · inbox · artifacts
+                    scheduled jobs · blueprints · integrity checks
+                             │
+                             ▼
+       ~/Projects/repos/<project>/.firepit/   files you own and commit
+       ~/Projects/repos/.firepit/             the central project
 ```
 
-## Configuration
+## What it does
 
-Settings live at `%APPDATA%\Firepit\settings.json`. The file is created the first time you change something via the in-app settings dialog (Firepit → Settings…); other knobs are hand-editable. The shape is described in `SPEC.md §Configuration`. Secrets in MCP entries are referenced via `${env:…}` or `${cred:…}` tokens — never put raw secrets in this file.
+- **Knowledge base.** Markdown documents in each project's
+  `.firepit/knowledge/` and in a global base, found by meaning, not only by
+  words. Search combines SQLite full-text search with local MiniLM vectors
+  (ONNX, sqlite-vec), and no text leaves the machine. Documents marked
+  `pin: true` are loaded into every session of their project through
+  `CLAUDE.md`. Tools: `firepit_knowledge_search`, `_get`, `_add`, `_update`
+  and `_delete`.
+- **Inbox between projects.** `firepit_send_to` drops a message into another
+  project's `.firepit/inbox/`. The message waits there until a session in
+  that project handles it and marks it done with `firepit_inbox_complete`.
+  The mod shows pending messages and, if you want, hands new ones to an idle
+  session.
+- **Artifacts.** Reports, screenshots, logs and builds that a session wants
+  you to open get pinned with `firepit_artifact_add`. They are listed in the
+  mod's panel, and markdown and text open right there.
+- **Project commands.** Each project's `.firepit/config.json` defines buttons
+  such as `Run: site` or `Git: status`. Long-running commands run as systemd
+  units, the others in Konsole or with their output in the chat. A shell
+  command only runs once you have trusted it.
+- **Scheduled jobs.** Cron-scheduled `claude -p` runs per project, with tool,
+  turn and budget limits, and their history.
+- **Blueprints and shared conventions.** One blueprint describes what a
+  Firepit project carries: the `CLAUDE.md` sections, the `.mcp.json` entry
+  and the ignore rules. Shared policy lives in the central project and is
+  imported into each `CLAUDE.md`, so editing it once changes every project.
+  Tools: `firepit_blueprint_list`, `_check` and `_apply`.
+- **Integrity checks.** `firepit_integrity_check` compares what Firepit
+  derives with what is on disk: the knowledge index against the documents,
+  the `CLAUDE.md` imports, blueprint conformance. With `repair` it rebuilds
+  what it derived. It never edits a document of yours.
+- **Projects.** Every folder under the projects root that has a `CLAUDE.md`
+  or a `.claude/` folder is a project. Each session finds its project from
+  the folder it runs in. You can also create and rename projects
+  (`firepit_create_project`, `firepit_rename_project`); a rename moves the
+  folder and Claude Code's history with it.
 
-State (open tabs) lives at `%LOCALAPPDATA%\Firepit\state.json` (versioned schema). Logs go to `%LOCALAPPDATA%\Firepit\logs\firepit-YYYY-MM-DD.log` (rotating, 14-day retention, 10 MB cap). Logs never include PTY contents — sizes and timestamps only.
+## Install
 
-## Distribution
+You need the .NET 10 SDK, a systemd user session and Claude Code. The
+commands mod opens Konsole and Dolphin by default.
 
-```powershell
-# Main app
-dotnet publish src/Firepit -c Release -r win-x64 `
-  --self-contained true `
-  -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true
-
-# MCP stdio bridge — ships next to Firepit.exe
-dotnet publish tools/firepit-mcp -c Release -r win-x64 `
-  --self-contained true `
-  -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true
+```bash
+git clone https://github.com/SACRVM/firepit-ai.git ~/Projects/repos/firepit-ai
+~/Projects/repos/firepit-ai/scripts/install-linux.sh
 ```
 
-Both publish to `bin/win-x64/` at the repo root (`Firepit.exe` ~160 MB, `firepit-mcp.exe` ~70 MB, both single-file self-contained .NET 10). The Inno Setup installer (`installer/firepit.iss`) packages both. Drop the directory anywhere and run `Firepit.exe`.
+The script installs or updates everything under `$HOME`:
 
-The Evergreen WebView2 runtime is required and ships with Windows 10 21H2+ and all Win11. On older systems Firepit will display a download link on first launch.
+- `firepitd` to `~/.local/opt/firepit`;
+- `firepit-mcp` as a .NET global tool in `~/.dotnet/tools`, which is on the
+  PATH that desktop apps get (`~/.local/bin` is not);
+- `firepit.service` as an enabled systemd user unit, which it then
+  (re)starts.
+
+Run it again after a `git pull` to update.
+
+**Connect a project.** Put this `.mcp.json` in the project root. Applying a
+blueprint does it for you, together with the `CLAUDE.md` sections:
+
+```json
+{ "mcpServers": { "firepit": { "type": "stdio", "command": "firepit-mcp" } } }
+```
+
+**Install the mod.** The repository is its own plugin marketplace. The
+installed mod is read from the working copy, so a `git pull` followed by
+`/reload-plugins` updates it.
+
+```bash
+claude plugin marketplace add ~/Projects/repos/firepit-ai
+claude plugin install firepit-commands@firepit --scope user
+```
+
+On first use, Firepit downloads the embedding model (all-MiniLM-L6-v2, about
+90 MB) from Hugging Face. Scheduled jobs need the `claude` CLI on the
+service's PATH. The copy bundled inside the desktop app does not count.
+
+## A project's `.firepit/`
+
+| Path | What it is | Commit it? |
+|---|---|---|
+| `config.json` | Commands, scheduled jobs, project id (JSONC) | yes |
+| `knowledge/*.md` | The project's knowledge documents | yes |
+| `knowledge-pinned.md` | Pinned documents, regenerated by Firepit and imported by `CLAUDE.md` | yes |
+| `artifacts.json` | Pinned files, as paths relative to the project | your call |
+| `inbox/` | Pending messages; handled ones move to `inbox/processed/` | no |
+| `runs/` | History of the scheduled job runs (30 days) | no |
+| `knowledge.db*` | The derived search index | no |
+
+Commands look like this. The panel shows the `description`, and an `inline`
+command answers in the chat:
+
+```jsonc
+{
+  "version": 1,
+  "id": "my-project",
+  "commands": [
+    { "group": "Run", "name": "site", "description": "Serves the site on :8000.",
+      "type": "shell", "command": "python3", "args": ["-m", "http.server"],
+      "window": "reuse:site", "longRunning": true },
+    { "group": "Git", "name": "status", "type": "shell",
+      "command": "git", "args": ["status", "-sb"], "window": "inline" },
+    { "group": "Git", "name": "repo", "type": "url",
+      "url": "https://github.com/me/my-project" }
+  ]
+}
+```
+
+The [mod's README](mods/firepit-commands/README.md) covers the bar, the
+panel, the inbox modes and `/fire`.
 
 ## Where things live
 
-- [`SPEC.md`](./SPEC.md) — vision, scope, brand language
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — technical contract
-- [`docs/ROADMAP.md`](./docs/ROADMAP.md) — V1 delivery plan, milestone-by-milestone
-- [`docs/PLATFORM.md`](./docs/PLATFORM.md) — V0.5.0 platform layer reference (per-project config, MCP, meta-project, inbox)
-- [`docs/FISHBOWL.md`](./docs/FISHBOWL.md) — Fishbowl integration as canonical per-project MCP example
-- [`CHANGELOG.md`](./CHANGELOG.md) — release notes
-- [`CLAUDE.md`](./CLAUDE.md) — operational brief for Claude Code sessions working on this repo
+| What | Where |
+|---|---|
+| Settings | `~/.config/firepit/settings.json`, optional; the projects root defaults to `~/Projects/repos` |
+| Logs, state, embedding model | `~/.local/share/firepit/` |
+| The MCP socket | `$XDG_RUNTIME_DIR/firepit/mcp.sock` (mode 0600) |
+| Global knowledge, shared `CLAUDE.md` fragments, blueprints | `<projects root>/.firepit/`, the central project |
+| The service | `systemctl --user status firepit`, `journalctl --user -u firepit -f` |
+
+Secrets in settings are referenced as `${env:NAME}` or `${cred:<target>}`
+and never stored as plain values. A `cred:` reference is looked up in the
+Secret Service (KWallet, GNOME Keyring) through `secret-tool`, under
+`service=firepit target=<target>`.
+
+## Develop
+
+```bash
+dotnet build Firepit.slnx
+dotnet test Firepit.slnx
+claude plugin test mods/firepit-commands
+```
+
+| Project | Role |
+|---|---|
+| `src/Firepit.Core` | Settings, projects, project config, inbox, artifacts, blueprints, jobs, secrets |
+| `src/Firepit.Knowledge` | Knowledge store, indexer, hybrid search, embeddings |
+| `src/Firepit.Mcp` | The MCP host: tools, resources, the socket server |
+| `src/Firepit.Workspace` | Everything the tools act on, without a window |
+| `src/Firepit.Daemon` | `firepitd`: the workspace and the MCP host as a service |
+| `src/Firepit.Process`, `src/Firepit.Adapters` | Processes for jobs, the Claude Code command line |
+| `tools/firepit-mcp` | The stdio ↔ socket bridge Claude Code starts |
+| `mods/firepit-commands` | The Claude Code mod |
+
+[`SPEC.md`](SPEC.md) says what Firepit is for and what it is not.
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the technical contract.
+[`docs/LINUX.md`](docs/LINUX.md) records the move to Linux and the open
+milestones. [`CHANGELOG.md`](CHANGELOG.md) has the release notes, and
+[`CLAUDE.md`](CLAUDE.md) is the brief for Claude sessions that work on this
+repository.
+
+## History
+
+From May to October 2026, Firepit was a native Windows shell: WPF, xterm.js
+in WebView2 and ConPTY. It hosted Claude Code sessions in tabs, with activity
+indicators (*burning*, *embers*), a project switcher and a toolbar per
+project. Over time it grew the parts this repository is now made of: the MCP
+server, the knowledge base, the inbox, artifacts, scheduled jobs and
+blueprints.
+
+When its author moved to Linux, Claude Code's desktop app already did the
+hosting well. The shell stayed behind, and the platform came along. The last
+Windows release is v0.30.0, and its code is on the
+[`windows-legacy`](https://github.com/SACRVM/firepit-ai/tree/windows-legacy) branch.
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE).
+MIT. See [`LICENSE`](LICENSE).
 
 ---
 
-*The firepit is cold. Gather a project to begin.*
+*The fire is lit. Pull up a session.*

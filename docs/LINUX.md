@@ -1,7 +1,11 @@
 # Firepit on Linux
 
 **Target:** v0.31.0 (headless platform)
-**Status:** decided 2026-10-13 — M10–M12 done
+**Status:** decided 2026-10-13 — M10–M12 done; the retirement half of M16
+done 2026-10-14; M13–M15 wait for ⛳2
+
+This is the decision record of the move to Linux, kept as it was decided.
+What Firepit is now is in `SPEC.md` and `docs/ARCHITECTURE.md`.
 
 ## Decisions (2026-10-13)
 
@@ -414,6 +418,17 @@ expose), and the artifacts with a markdown/text viewer.
   on Unix").
 
 Tag `v0.40.0`.
+
+**Done (2026-10-14):** the retirement. `src/Firepit`, `src/Firepit.Web`,
+`installer/`, `run.ps1`, the icon script, `/run` and the V1 design docs
+(ROADMAP, PLATFORM, FISHBOWL, the V1.x notes) left `main`; they are on
+`windows-legacy`. README, SPEC, ARCHITECTURE and CLAUDE.md describe the
+platform. The server instructions, the tool descriptions and the config
+scaffold no longer talk about tabs, panes or Windows, and the tab tools are
+left out of the tool list without a shell. Since there is no shell, the
+invariant about a pseudo-terminal went with the shell instead of being
+reworded. `/release` is rewritten for the Linux flow. Packaging (PKGBUILD,
+`.desktop`) waits until a second machine needs it.
 
 ## Data migration (part of M10/M12)
 

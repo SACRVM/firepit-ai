@@ -12,7 +12,7 @@
     <Company>Firepit</Company>
     <Product>Firepit</Product>
     <Copyright>Copyright (c) Firepit contributors</Copyright>
-    <!-- Output paths: bin/Debug/Firepit.exe, not bin/Debug/net10.0-windows/Firepit.exe.
+    <!-- Output paths: bin/Debug/firepitd, not bin/Debug/net10.0/firepitd.
          Single-TFM-per-project repo, so no collision risk. -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>

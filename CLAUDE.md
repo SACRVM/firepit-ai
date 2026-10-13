@@ -1,19 +1,146 @@
 # CLAUDE.md
 
-Project guidance for Claude Code sessions working on Firepit. This file is the operational brief — what to build, what not to build, and which lines must not be crossed.
+The operational brief for Claude Code sessions working on Firepit: what it
+is, what not to build, and which lines must not be crossed.
 
-## Status (2026-10): Linux-first
+## What Firepit is
 
-`main` targets Linux (CachyOS, KDE Plasma, Wayland). The WPF shell is frozen
-at v0.30.0 on the `windows-legacy` branch; `src/Firepit` and `src/Firepit.Web`
-are out of `Firepit.slnx` and are being taken apart. **The working plan is
-`docs/LINUX.md`**, not `ROADMAP.md`: Claude Code desktop is the UI, Firepit is
-the platform behind it (MCP) plus the `firepit-commands` mod.
+The platform behind Claude Code for one person with many projects:
 
-Build and test with `dotnet build Firepit.slnx` and `dotnet test Firepit.slnx`.
-`run.ps1`, `/run` and `/release` are Windows-only and do not apply on `main`.
-Where this file still says Windows, WPF, ConPTY or `%APPDATA%`, read it as
-history until the docs are rewritten.
+- **firepitd**, a systemd user service, owns projects, knowledge, inbox,
+  artifacts, commands, blueprints, integrity checks and scheduled jobs.
+- **firepit-mcp** bridges every Claude Code session to it over MCP.
+- **The `firepit-commands` mod** puts the project's commands, inbox and
+  artifacts into the Claude Code window.
+
+Linux-first (CachyOS, KDE Plasma 6, Wayland). The old Windows shell (WPF,
+WebView2, ConPTY) ended at v0.30.0 and lives on the `windows-legacy` branch;
+`main` no longer carries it.
+
+Read, in this order:
+
+1. **`SPEC.md`**: the product, its scope and its non-goals. The *why*.
+2. **`docs/ARCHITECTURE.md`**: processes, protocol, data, security. The
+   *how*.
+3. **`docs/LINUX.md`**: the decision record and the open milestones
+   (M13–M16, gate ⛳2). The *what next*.
+
+## What not to build
+
+- **A window, terminal or shell.** Claude Code is the interface. A shell of
+  its own comes back only through gate ⛳2 in `docs/LINUX.md`, and then as
+  the milestones say, not as a side quest.
+- **Model calls of Firepit's own.** Jobs start `claude -p`, and the mod
+  hands messages to the open session. Nothing else asks a model.
+- **Cloud, sync, accounts or teams.** One user, one machine, files on disk.
+- **An MCP server catalog.** Claude Code owns which servers a session gets.
+- **A file manager or an editor.** Artifacts are links; files open in their
+  own programs.
+
+If a request reads like one of these, say so before building it.
+
+## Invariants
+
+Breaking one is a regression even when the tests pass.
+
+1. **Libraries know no host.** `Firepit.Core`, `Firepit.Knowledge`,
+   `Firepit.Process`, `Firepit.Adapters` and `Firepit.Mcp` target plain
+   `net10.0`. They must not reference the workspace, the daemon or any UI.
+   Compare paths through `PlatformText` and build them through
+   `FirepitPaths`, never with hard-coded separators or case rules.
+2. **The workspace has no UI.** Whatever a shell would do goes through
+   `ITabHost`; the daemon passes `HeadlessTabHost`.
+3. **The bridge is a tunnel.** `tools/firepit-mcp` translates frames and
+   references no Firepit assembly. The protocol lives in `McpHost`.
+4. **One writer per file.** The workspace writes `.firepit/config.json`,
+   `artifacts.json` and the inbox moves. The mod reads files and writes only
+   through Firepit's MCP tools. A rewrite keeps every field it does not
+   understand the meaning of. `description` and `bar` were nearly lost that
+   way.
+5. **The mod writes state only when it changed.** Every write redraws the
+   bar and the panel and retires the press handles of the old drawing; a
+   timer that writes unchanged values makes clicks miss.
+6. **Files you own.** Everything a project carries is plain JSON or markdown
+   under its `.firepit/`. Derived data (indexes, run history) is never the
+   only copy.
+7. **Neutral code vocabulary.** `Project`, `InboxMessage`, `JobScheduler`.
+   The fire belongs in user-facing copy only; `class FireKindler` is a
+   regression.
+
+## Build, test, run
+
+```bash
+dotnet build Firepit.slnx
+dotnet test Firepit.slnx
+```
+
+The mod has no Node toolchain. Use the Claude Code CLI bundled with the
+desktop app (`~/.config/Claude/claude-code/<version>/claude`):
+
+```bash
+claude plugin validate mods/firepit-commands
+claude plugin test mods/firepit-commands
+```
+
+Run Firepit as it runs for real. `scripts/install-linux.sh` publishes the
+daemon, reinstalls the bridge and restarts the service. Then:
+
+```bash
+systemctl --user status firepit
+journalctl --user -u firepit -f
+```
+
+A throwaway daemon for experiments: `firepitd --instance dev --no-jobs`.
+Point a session at it with `FIREPIT_INSTANCE=dev`.
+
+Things that bit before:
+
+- Desktop apps get the systemd user PATH: `~/.dotnet/tools` is on it,
+  `~/.local/bin` is not. That is why the bridge is a .NET global tool.
+- `pkill -f <pattern>` matches the Bash tool's own command line. Use
+  `pkill -x firepitd`.
+- The interactive shell is zsh/fish: quote globs (`'*.cs'`) and do not
+  `echo =====`.
+- The mod is read from the working copy. `/reload-plugins` picks up edits,
+  but a session whose `/fire` registration came from an older copy needs a
+  new session.
+
+## Code conventions
+
+- .NET 10, nullable enabled, warnings are errors, async by default.
+- **The product is English. Every string.** That covers UI labels in the
+  mod, tool descriptions, server instructions, log messages, exception
+  text, docs and commit messages. The author works in German and sessions
+  are usually held in German. That stays in the conversation. Before
+  finishing, grep the diff for German (`ä ö ü ß`,
+  `der|die|das|nicht|Datei|Ordner`). This has regressed three times.
+- No new third-party dependency without a one-line justification in the
+  commit message.
+- Prefer editing an existing file to creating one. Match the comment
+  density and the naming of the code around you.
+- Agent-facing text (server instructions, tool descriptions, blueprint
+  sections) is product surface. It is read by every session, so keep it
+  short, keep it true, and keep tool names spelled exactly
+  (`FirepitServerInstructionsTests` checks).
+
+## Testing
+
+- Seams instead of mocks of what Firepit does not own: `ITabHost`,
+  `IJobRunner`, `IActivityClock`, injectable secret lookups, a fake
+  `claude` script for process tests.
+- The workspace is tested headless against a temporary projects root
+  (`tests/Firepit.Workspace.Tests`).
+- The mod's tests mount the bar and the panel on the `desktop` and
+  `terminal` surfaces against a mocked engine and clock. Write the body
+  once and loop it over both surfaces.
+- Facts about Windows behaviour use `WindowsFact` and skip here.
+
+## Releases
+
+`/release` bumps `firepitd` and `firepit-mcp` together, closes the
+changelog section, tags `v*`, publishes the GitHub release and reinstalls
+the service. Milestones get `m*` tags. The mod versions itself in
+`plugin.json` and `VERSION` in `hooks/register.tsx`; keep the two in step.
 
 ## Git workflow (durable authorization)
 
@@ -29,188 +156,6 @@ Still gated (require explicit per-action confirmation):
 - `git reset --hard` on `main`
 - Tag deletion or moving an existing tag
 - Anything destructive to history
-
-## Reading order
-
-1. **`SPEC.md`** — product vision, scope, brand language. The *why*.
-2. **`docs/ARCHITECTURE.md`** — technical contract: interfaces, bridge protocol, threading, security boundary, distribution. The *how*.
-3. **`docs/ROADMAP.md`** — V1 milestones M0–M7, ordered, each with deliverables and acceptance criteria. The *when* and the working plan for autonomous execution.
-
-For any V1 implementation work, `ROADMAP.md` is the working plan. Pick the next unfinished milestone, deliver it against the listed acceptance criteria, tag it (`m{N}-{slug}`), move on.
-
----
-
-## What Firepit Is
-
-A native Windows shell that hosts AI agent CLI sessions (Claude Code, Aider, etc.) in tabs, with activity indicators and a project switcher. Local-first, terminal-centric. **Not** a cloud orchestrator, **not** an IDE, **not** an Electron app.
-
-If you find yourself building a file manager, an editor, or a control plane — stop. That is not this product.
-
----
-
-## Tech Stack (V1)
-
-| Layer | Choice |
-|---|---|
-| Runtime | .NET 10 |
-| UI Shell | WPF (native) |
-| Terminal Tile | WebView2 + xterm.js |
-| PTY Backend | Pty.Net (or direct ConPTY P/Invoke) |
-| Config | JSON in `%APPDATA%\Firepit` |
-
-Platform: **Windows-only** in V1. Cross-platform is deferred.
-
----
-
-## Architectural Invariants
-
-These are non-negotiable. Violating them is a regression even if tests pass.
-
-1. **`ITerminalView` is the single contract** between tab UI and terminal renderer. V1 ships only `WebView2TerminalView`, but the abstraction must exist from day one. No code outside the WebView2 implementation may import `Microsoft.Web.WebView2` types or know about xterm.js.
-2. **Firepit is a transparent host.** It does not parse, modify, or interpret PTY output beyond timestamping reads for activity detection. No screen-scraping the agent's output.
-3. **Each agent runs as a real child process under ConPTY.** Stdin/stdout redirection without a pseudo-console will not work for TUI agents and is forbidden.
-4. **Brand vocabulary is user-facing only.** Code uses neutral identifiers (`Project`, `Session`, `Tab`, `TerminalView`, `ProcessHost`, `ActivityDetector`). Logs are professional. *Burning*, *embers*, *summon*, *rekindle*, *gather* belong in tooltips, status strings, error messages, README — never in class names.
-5. **Project layout splits UI from logic:** `Firepit.Core`, `Firepit.Process`, `Firepit.Adapters` must not reference `Firepit` (the WPF project). The shell depends on Core; Core never depends on the shell.
-
----
-
-## V1 Scope (Must-Have)
-
-- Project list scanned from configurable root (qualifies via `CLAUDE.md`, `.claude/`, or manual entry)
-- Tabs per active project session, optionally persistent across restarts
-- Embedded terminal per tab (WebView2 + xterm.js + ConPTY)
-- Activity indicator: cold / igniting / burning / embers / dead — driven by PTY-read timestamps
-- Toolbar: Rekindle, Resume Last, Open in Explorer, Open External Shell
-- Per-project quick-links (toolbar URL buttons, system browser via `Process.Start`; data shape sub-tab-friendly for V2)
-- MCP server registry ("kindling"): global catalog + per-project activation + adapter-driven projection into the agent's expected format
-- JSON config in `%APPDATA%\Firepit` (settings, projects, MCP registry, quick-links)
-- Single-instance behavior
-
-## Explicitly Out of Scope for V1
-
-File browser, markdown viewer, image viewer, embedded PowerShell, project sub-tabs / cockpit layout, agent adapters beyond Claude Code, macOS/Linux, multiple themes, telemetry, crash reporting, any AI features beyond hosting agents, registry-editor UI for MCP, DPAPI in-file secrets, MCP marketplace discovery.
-
-(Post-V1 note: an in-app update check + self-update landed after V1 — a caption-bar badge polls GitHub Releases and the Inno installer is run silently to update in place. See `Firepit.Core.Updates` and `MainWindow.Updates.cs`.)
-
-If a request reads as V2/V3 territory, push back: confirm V1 is solid first. The sub-tab cockpit in particular is a magnet for scope creep — V1 ships the foundation (terminal-only tabs, quick-links open externally), V2 generalizes.
-
----
-
-## Project Structure
-
-```
-firepit-ai/
-├── src/
-│   ├── Firepit/              # WPF main project (.exe entry)
-│   ├── Firepit.Core/         # Domain models, interfaces (ITerminalView, IAgentAdapter)
-│   ├── Firepit.Process/      # ConPTY, agent process management
-│   ├── Firepit.Web/          # WebView2 hosting, xterm.js bridge, embedded resources
-│   └── Firepit.Adapters/     # Per-agent adapters (V1: ClaudeCode only)
-├── docs/
-├── tests/
-├── SPEC.md
-├── CLAUDE.md
-├── README.md
-└── Firepit.sln
-```
-
-`Firepit.Web` owns everything WebView2/xterm.js. The xterm.js bundle ships as embedded resources, served to WebView2 via `SetVirtualHostNameToFolderMapping`. Do not load from `file://`.
-
----
-
-## Key Behaviors
-
-### Activity States (per tab)
-
-| State | Trigger | Visual |
-|---|---|---|
-| `Cold` | Project added, no session | dim |
-| `Igniting` | User clicked summon, agent launching | warming |
-| `Burning` | PTY output within last `activityIdleThresholdMs` (default 500ms) | bright |
-| `Embers` | No PTY output for >threshold | dimmed warm |
-| `Dead` | Process exited | grey |
-
-Driven by a 200ms-tick timer comparing now to `lastReadTimestamp`. Apply hysteresis on Burning↔Embers transitions to prevent flicker on slowly-streaming agents.
-
-### Toolbar Actions
-
-- **Rekindle**: kill child process, relaunch agent CLI (no `--continue`)
-- **Resume Last**: relaunch with `--continue` (Claude Code) or adapter-equivalent
-- **Open in Explorer**: `explorer.exe <project_path>`
-- **Open External Shell**: `wt.exe -d <path>` if `wt` on PATH, else `powershell.exe -NoExit -Command "Set-Location <path>"` (config-overridable)
-
-### Session Resumption
-
-V1: just `--continue`. V2 introduces `--resume <session-id>` with a history dropdown.
-
----
-
-## Code Conventions
-
-- Target framework: .NET 10. AOT-friendly where reasonable; do not block on AOT for V1.
-- Async by default. PTY I/O, FileSystemWatcher events, and process lifecycle are all async.
-- Nullable reference types: enabled.
-- DI: a lightweight container in the shell wires Core/Process/Adapters services into the WPF views.
-- Logging: Serilog to `%LOCALAPPDATA%\Firepit\logs`, rotating file. Format and retention TBD (see SPEC §Open Questions).
-- No code-side dependencies on brand vocabulary. If you write `class FireKindler`, you've drifted — rename.
-- **The app is English. Every string.** Labels, tooltips, menu headers, toasts,
-  dialogs, empty states, log messages, exception text, MCP tool descriptions —
-  all English, no exceptions, no localization layer. The author works in German
-  and sessions are usually held in German; that is the *conversation* language
-  and it must not leak into the product. Before finishing any UI work, grep your
-  diff for German (`ä ö ü ß`, `der|die|das|nicht|Datei|Ordner`) — this has
-  regressed twice (v0.9.0 artifact pane, update badge tooltip).
-
----
-
-## Testing
-
-ConPTY-driven code is hard to test directly. Apply seams:
-
-- `IPtyChannel` (read/write/close) abstracts the PTY so process-host logic is unit-testable with a fake.
-- `IActivityClock` injects time into the activity detector — drive transitions deterministically.
-- Adapters get golden-file tests for command-line construction.
-- The WebView2 bridge is integration-tested end-to-end on a real WebView2 instance in a CI-skippable suite (CI on Windows runners only).
-
-Avoid mocking what you don't own (ConPTY, WebView2). Wrap them in narrow interfaces and test against fakes.
-
----
-
-## Distribution (V1)
-
-GitHub Releases, single-file self-contained .NET publish. Two artifacts per `v*` tag: the published `bin/win-x64/` zipped, and an Inno Setup installer (`FirepitSetup-*.exe`, per-user `%LOCALAPPDATA%\Programs\Firepit`, no UAC). The portable zip still works drop-the-exe-anywhere. Installed builds self-update via the in-app update check (downloads the installer, runs it silently, relaunches); portable copies fall back to opening the release page.
-
-The xterm.js bundle and `terminal.html` ship as embedded resources inside the exe — keep `dotnet publish` output to one file plus a runtime folder.
-
----
-
-## Open Decisions (See SPEC §Open Questions)
-
-License (MIT likely), single-instance mechanism (mutex vs. named pipe — pipe preferred for arg passing), session/scrollback persistence depth, logging retention, first-run UX.
-
-When in doubt, defer: any of these can land after V1 prototype runs.
-
----
-
-## Running the App During Development
-
-Use **`./run.ps1`** (or the **`/run`** slash command) — never invoke `dotnet
-build` + `Firepit.exe` manually. The script kills any running instance,
-builds, and launches the canonical exe at `src/Firepit/bin/{Debug|Release}/Firepit.exe`.
-
-`Directory.Build.props` sets `AppendTargetFrameworkToOutputPath=false`, but
-old TFM-suffixed paths (`bin/Release/net10.0-windows10.0.17763.0/Firepit.exe`)
-still exist on disk from before V1.12 and have caused "I'm running a stale
-build" confusion. `run.ps1` always points at the right one. `./run.ps1 -Clean`
-wipes those stale paths.
-
-## Working with This Codebase
-
-- Read `SPEC.md` first if you haven't. It is the contract.
-- For any non-trivial change, write a short plan and confirm before refactoring across project boundaries.
-- Prefer editing existing files over creating new ones, but do create the project skeleton if the solution is empty — `SPEC.md` defines the layout.
-- Don't introduce a third-party library without a one-line justification in the PR/commit. Dependency creep is a real risk for a tool that markets itself as "no Electron, no bundle."
-- The success criterion is personal: *"the author replaces three permanently-open PowerShell windows with one Firepit window and never goes back."* Optimize for that.
 
 ## Firepit inbox
 
@@ -228,7 +173,7 @@ The import above auto-loads the knowledge docs marked `pin: true` in their front
 
 ## Firepit artifacts
 
-When you produce a file the user will want to open — a report, screenshot, diagram, generated image, log excerpt, build output, or an executable you built for them to run — pin it with the `firepit_artifact_add` MCP tool so it appears in the project's paperclip pane. Do this as you produce it, not at the end of the session; a path buried in scrollback is a path the user has to hunt for. Pinning only links the file — it stays where it is, and `firepit_artifact_remove` never deletes it. Check `firepit_artifact_list` first so you update an existing entry instead of piling up near-duplicates, and unpin what has gone stale.
+When you produce a file the user will want to open — a report, screenshot, diagram, generated image, log excerpt, build output, or an executable you built for them to run — pin it with the `firepit_artifact_add` MCP tool so it appears in the Artifacts list of the project's Firepit panel. Do this as you produce it, not at the end of the session; a path buried in scrollback is a path the user has to hunt for. Pinning only links the file — it stays where it is, and `firepit_artifact_remove` never deletes it. Check `firepit_artifact_list` first so you update an existing entry instead of piling up near-duplicates, and unpin what has gone stale.
 
 ## Firepit conventions
 

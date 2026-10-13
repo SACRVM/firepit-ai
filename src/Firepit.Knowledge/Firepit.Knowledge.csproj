@@ -9,7 +9,7 @@
   <!-- Deliberately self-contained: no references to other Firepit projects.
        If a second consumer shows up, this project can be lifted out into a
        shared library as a move, not a refactor. Engine ported from
-       the-fishbowl (see docs/ROADMAP.md M9). -->
+       the-fishbowl (M9 of the V1 roadmap, on the windows-legacy branch). -->
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.6" />
     <!-- Transitive override: Microsoft.Data.Sqlite 10.0.6 pins SQLitePCLRaw
