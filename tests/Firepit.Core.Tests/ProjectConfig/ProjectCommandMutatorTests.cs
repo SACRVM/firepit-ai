@@ -133,4 +133,50 @@ public class ProjectCommandMutatorTests
         Assert.Single(result);
         Assert.Equal("pnpm", result[0].Command);
     }
+
+    private static ProjectCommand Grouped(string group, string name, string command) =>
+        new(Name: name, Type: ProjectCommandType.Shell, Command: command, Group: group);
+
+    [Fact]
+    public void Upsert_SameNameInAnotherGroup_IsAnotherCommand()
+    {
+        var existing = new[] { Grouped("Build", "debug", "dotnet") };
+
+        var result = ProjectCommandMutator.Upsert(existing, Grouped("Run", "debug", "dotnet"));
+
+        Assert.Equal(["Build debug", "Run debug"], result.Select(ProjectCommandMutator.PhraseOf));
+    }
+
+    [Fact]
+    public void Upsert_SameGroupAndName_ReplacesInPlace()
+    {
+        var existing = new[] { Grouped("Git", "status", "git"), Grouped("Git", "repo", "xdg-open") };
+
+        var result = ProjectCommandMutator.Upsert(existing, Grouped("git", "STATUS", "jj"));
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("jj", result[0].Command);
+    }
+
+    [Fact]
+    public void RemoveByName_ThePhraseWins()
+    {
+        var existing = new[] { Grouped("Build", "debug", "a"), Grouped("Run", "debug", "b") };
+
+        var (result, removed) = ProjectCommandMutator.RemoveByName(existing, "run debug");
+
+        Assert.True(removed);
+        Assert.Equal("a", Assert.Single(result).Command);
+    }
+
+    [Fact]
+    public void Ambiguous_NamesEveryGroupThatHasTheName()
+    {
+        var existing = new[] { Grouped("Build", "debug", "a"), Grouped("Run", "debug", "b"), Grouped("Git", "status", "c") };
+
+        Assert.Equal(["Build debug", "Run debug"], ProjectCommandMutator.Ambiguous(existing, "debug"));
+        Assert.Empty(ProjectCommandMutator.Ambiguous(existing, "status"));
+        Assert.Empty(ProjectCommandMutator.Ambiguous(existing, "Run debug"));
+        Assert.Empty(ProjectCommandMutator.Ambiguous(existing, "ghost"));
+    }
 }

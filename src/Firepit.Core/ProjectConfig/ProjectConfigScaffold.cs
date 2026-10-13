@@ -40,75 +40,50 @@ public static class ProjectConfigScaffold
 
     public static string BuildScaffold(string projectId) => $$"""
 {
-  // Firepit per-project config — see docs/ARCHITECTURE.md §9 for the schema.
-  // JSONC: comments and trailing commas are allowed.
-  // Edit and save — quickLinks and commands hot-reload; mcpActivations,
-  // agent, and session.envOverrides need a session restart (Firepit shows a
-  // banner when that happens).
+  // Firepit per-project config. JSONC: comments and trailing commas are allowed.
+  // The firepit-commands mod for Claude Code reads it and picks up every save.
 
   "version": 1,
   "id": "{{projectId}}",
 
-  // Toolbar URL buttons. {projectName} and {projectPath} are substituted.
-  // "quickLinks": [
-  //   { "name": "GitHub", "url": "https://github.com/<you>/{projectName}" },
-  //   { "name": "Docs",   "url": "https://your-docs.example.com/{projectName}" }
-  // ],
-
-  // Activate MCP servers from the global registry (settings.json -> mcpServers).
-  // Optional per-server overrides for args/env/headers.
-  // "mcpActivations": [
-  //   { "id": "firepit" },
-  //   { "id": "fishbowl",
-  //     "headerOverrides": { "Authorization": "Bearer ${cred:firepit/fishbowl-{{projectId}}}" } }
-  // ],
-
-  // Per-project agent override. If omitted, falls back to settings.defaultAgent.
-  // "agent": {
-  //   "command": "claude",
-  //   "args": ["--model", "sonnet"],
-  //   "envOverrides": { "ANTHROPIC_LOG": "info" }
-  // },
-
-  // Extra env vars on the PTY child (the agent + everything it spawns).
-  // "session": {
-  //   "envOverrides": { "MY_VAR": "value" }
-  // },
-
-  // Custom toolbar commands. Three types:
-  //   "shell"         — spawn Command + Args in the project dir (new window)
-  //   "claude-prompt" — paste Prompt into the live session as if you typed it
-  //   "url"           — open Url in the default browser
-  //
-  // Shell-only knobs (issue #11):
-  //   cwd          — working dir (default: project root)
-  //   env          — extra env vars on the child
-  //   elevated     — Windows UAC prompt (run as administrator)
-  //   confirm      — modal "Run?" prompt before spawning
-  //   window       — "new" (default) | "reuse:<id>" | "inline"
-  //                  reuse:<id>  → second click focuses the existing window
-  //                  inline      → write the command into THIS tab's PTY
-  //   longRunning  — true keeps a live indicator on the button + right-click
-  //                  "Stop" kills the process tree
-  //   keepOpenOnError — true: the spawned console closes on success but stays
-  //                  open (pauses) on a non-zero exit so you can read the
-  //                  error. Replaces blanket "-NoExit". Windowed shell only.
-  //   group        — opt-in: commands sharing a group label collapse into one
-  //                  toolbar dropdown button (e.g. "Run" for Build/Debug/
-  //                  Release). Omit for a standalone button.
+  // Project commands: buttons above the prompt, rows in the Firepit panel,
+  // and /fire <group> <name>. Put each command in a group named after its
+  // area (Run, Build, Test, Git, Open) and give it a short lowercase name,
+  // unique within the group, so the two read as a phrase: "Git status".
+  //   type         — "shell" (command + args, an argv, not a shell line)
+  //                  | "claude-prompt" (prompt goes to the session as yours)
+  //                  | "url" (opens in the browser)
+  //   description  — one sentence for the panel
+  //   bar          — false keeps it out of the bar; the panel lists it anyway
+  //   cwd, env     — working dir (relative to the project), extra variables
+  //   window       — "new" (default): a terminal window
+  //                  "reuse:<id>": one at a time per id
+  //                  "inline": runs in the background; the output comes back
+  //                  in the chat, where the session can read it
+  //   longRunning  — a background service (a systemd user unit) with stop
+  //                  and logs in the panel; pair it with reuse:<id>
+  //   keepOpenOnError — the window stays open on a non-zero exit
+  //   confirm      — asks before it runs
+  // Shell commands run only after you trust them in the panel, and again
+  // after any of their command lines changes.
   // "commands": [
-  //   { "name": "Tests",   "type": "shell",         "command": "pwsh", "args": ["-c", "dotnet test"] },
-  //   { "name": "Dev",     "type": "shell",         "command": "npm",  "args": ["run", "dev"],
+  //   { "group": "Run", "name": "dev", "description": "Starts the dev server.",
+  //     "type": "shell", "command": "npm", "args": ["run", "dev"],
   //     "window": "reuse:dev", "longRunning": true },
-  //   { "name": "Build",   "type": "shell",         "command": "dotnet", "args": ["build"], "window": "inline" },
-  //   { "name": "Refactor","type": "claude-prompt", "prompt": "Look for code smells in src/ and propose fixes." },
-  //   { "name": "Issues",  "type": "url",           "url": "https://github.com/<you>/{projectName}/issues" }
+  //   { "group": "Test", "name": "all", "description": "Runs the tests; the result lands in the chat.",
+  //     "type": "shell", "command": "dotnet", "args": ["test"], "window": "inline" },
+  //   { "group": "Git", "name": "status", "type": "shell",
+  //     "command": "git", "args": ["status", "-sb"], "window": "inline" },
+  //   { "group": "Claude", "name": "review", "type": "claude-prompt",
+  //     "prompt": "Look for code smells in src/ and propose fixes." },
+  //   { "group": "Open", "name": "issues", "type": "url",
+  //     "url": "https://github.com/<you>/{{projectId}}/issues" }
   // ],
 
   // Scheduled headless Claude runs. Each entry fires on its cron schedule
-  // and spawns `claude -p "<prompt>" --output-format json` in this project's
-  // directory. Output lands under .firepit/runs/<name>/<utc>.json and shows
-  // up as a tab badge.
+  // and starts `claude -p "<prompt>" --output-format json` in this project's
+  // directory (the claude CLI must be on the Firepit service's PATH). Each
+  // run is recorded under .firepit/runs/<name>/<utc>.json.
   //   name              — unique within this project
   //   prompt            — what gets passed to `claude -p` (slash-commands work)
   //   schedule          — standard 5-field cron expression
@@ -116,23 +91,20 @@ public static class ProjectConfigScaffold
   //   timeoutSeconds    — kill after N seconds (default 300)
   //   timezone          — IANA tz name (default = local)
   //   onConcurrent      — skip | queue | killAndRestart (default skip)
-  //   notify            — always | onChange | never (default onChange)
-  //                       controls cross-Claude inbox messaging
+  //   notify            — always | onChange | never; read but not acted on yet
   //   allowedTools      — passed through as --allowedTools
   //   maxTurns          — passed through as --max-turns
   //   maxBudgetUsd      — passed through as --max-budget-usd
   //   skipPermissions   — --dangerously-skip-permissions (default false)
   // "scheduledJobs": [
   //   { "name": "check-mails", "prompt": "/check-mails",
-  //     "schedule": "*/30 * * * *", "notify": "onChange" },
+  //     "schedule": "*/30 * * * *" },
   //   { "name": "weekly-review", "prompt": "/weekly-review",
   //     "schedule": "0 8 * * 1", "timeoutSeconds": 900 }
   // ],
 
-  // Per-project overrides for the runs feature. Null → inherit from
-  // global settings.platform.
+  // How long run records are kept. Null → settings.platform.runRetentionDays.
   // "runs": {
-  //   "badgePolicy": "all",         // "all" | "failuresOnly"
   //   "retentionDays": 30
   // }
 }

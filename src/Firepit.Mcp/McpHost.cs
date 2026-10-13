@@ -51,16 +51,22 @@ public sealed class McpHost : IDisposable
 
     private readonly IMcpBackend _backend;
     private readonly string      _serverVersion;
+    private readonly bool        _hasShell;
     private readonly CancellationTokenSource _cts = new();
     private int  _activeClients;
     private int  _exhaustionLogged;
     private bool _disposed;
     private Socket? _listener;
 
-    public McpHost(IMcpBackend backend, string serverVersion = "0.5.0")
+    /// <param name="hasShell">Whether a Firepit shell hosts sessions in tabs.
+    /// Without one the tab tools and the sessions resource are left out of
+    /// the lists; a call that names them anyway still gets the backend's
+    /// answer.</param>
+    public McpHost(IMcpBackend backend, string serverVersion = "0.5.0", bool hasShell = false)
     {
         _backend       = backend ?? throw new ArgumentNullException(nameof(backend));
         _serverVersion = serverVersion;
+        _hasShell      = hasShell;
     }
 
     public void Start()
@@ -400,6 +406,7 @@ public sealed class McpHost : IDisposable
         var tools = new JsonArray();
         foreach (var def in McpToolDefinitions.All)
         {
+            if (!_hasShell && McpToolDefinitions.ShellOnly.Contains(def.Name)) continue;
             tools.Add(new JsonObject
             {
                 ["name"]        = def.Name,
@@ -553,7 +560,11 @@ public sealed class McpHost : IDisposable
                     Elevated:    args["elevated"]?.GetValue<bool?>(),
                     Confirm:     args["confirm"]?.GetValue<bool?>(),
                     Window:      args["window"]?.GetValue<string?>(),
-                    LongRunning: args["longRunning"]?.GetValue<bool?>());
+                    LongRunning: args["longRunning"]?.GetValue<bool?>(),
+                    KeepOpenOnError: args["keepOpenOnError"]?.GetValue<bool?>(),
+                    Group:       args["group"]?.GetValue<string?>(),
+                    Description: args["description"]?.GetValue<string?>(),
+                    Bar:         args["bar"]?.GetValue<bool?>());
                 var result = await _backend.AddProjectCommandAsync(projectName, spec);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
             }
@@ -765,6 +776,7 @@ public sealed class McpHost : IDisposable
         var resources = new JsonArray();
         foreach (var def in McpResourceDefinitions.All)
         {
+            if (!_hasShell && def.Uri == "firepit://sessions") continue;
             resources.Add(new JsonObject
             {
                 ["uri"]         = def.Uri,

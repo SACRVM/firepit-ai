@@ -140,6 +140,6 @@ public class ProjectScheduledJobTests : IDisposable
     {
         var content = ProjectConfigScaffold.BuildScaffold("demo");
         Assert.Contains("\"runs\"", content);
-        Assert.Contains("badgePolicy", content);
+        Assert.Contains("retentionDays", content);
     }
 }

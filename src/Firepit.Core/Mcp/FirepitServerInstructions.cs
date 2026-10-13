@@ -22,11 +22,11 @@ public static class FirepitServerInstructions
 {
     public const string Text =
         """
-        Firepit is the desktop shell hosting this session: one tab per project, an
-        artifact pane for pinned files, an inbox for cross-project messages, and a
-        searchable knowledge base. Firepit is a transparent host — it never reads or
-        interprets terminal output. Anything the user should see or keep, you have to
-        pin, send, or save explicitly.
+        Firepit is the user's local platform behind Claude Code: a knowledge base
+        shared by all their projects, an inbox for messages between projects, a list
+        of pinned artifacts, and project commands, shown in the Firepit panel of the
+        Claude Code window. It never sees this conversation. Anything the user should
+        see or keep, you have to pin, send, or save explicitly.
 
         Artifacts. When you produce a file the user will want to open — a report,
         screenshot, diagram, generated image, log excerpt, build output, or an
@@ -39,9 +39,9 @@ public static class FirepitServerInstructions
 
         Inbox. Other projects, and the user, send messages here. Read the pending ones
         with firepit_inbox_list, act on them, then close each with
-        firepit_inbox_complete using the entry's id. Firepit may hand you a message on
-        its own once a session goes idle — treat it as a request from the user, and
-        stop to ask before anything irreversible.
+        firepit_inbox_complete using the entry's id. Firepit may announce new messages
+        on its own once the session is idle; do what that notice asks — summarise and
+        wait, or handle them — and stop to ask before anything irreversible.
 
         Knowledge. Before researching something that may already be known, search with
         firepit_knowledge_search (scope "both" covers this project plus the global

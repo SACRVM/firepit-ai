@@ -119,6 +119,47 @@ public sealed class WorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ChangingOneCommand_KeepsTheOthersDescriptions()
+    {
+        // The commands mod reads description and bar; a rewrite of the file
+        // through the tools must carry them, not drop what it doesn't know.
+        var config = Path.Combine(_projects, "alpha", ".firepit", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        await File.WriteAllTextAsync(config, """
+            { "version": 1, "id": "alpha", "commands": [
+              { "group": "Run", "name": "site", "type": "shell", "command": "python3",
+                "description": "Serves the site.", "bar": false } ] }
+            """);
+
+        var added = await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(
+            Name: "status", Type: "shell", Command: "git", Group: "Git",
+            Description: "Shows the branch.", KeepOpenOnError: true));
+        Assert.True(added.Ok, added.Message);
+
+        var commands = (await _ws.ListProjectCommandsAsync("alpha")).Commands;
+        Assert.Equal(
+            [("site", "Serves the site.", (bool?)false), ("status", "Shows the branch.", (bool?)null)],
+            commands.Select(c => (c.Name, c.Description, c.Bar)));
+        Assert.True(commands[1].KeepOpenOnError);
+        Assert.Contains("\"description\": \"Serves the site.\"", await File.ReadAllTextAsync(config));
+    }
+
+    [Fact]
+    public async Task ANameTwoGroupsShare_IsRemovedOnlyWithItsGroup()
+    {
+        await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(Name: "debug", Type: "shell", Command: "a", Group: "Build"));
+        await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(Name: "debug", Type: "shell", Command: "b", Group: "Run"));
+
+        var vague = await _ws.RemoveProjectCommandAsync("alpha", "debug");
+        Assert.False(vague.Ok);
+        Assert.Contains("Build debug", vague.Message);
+
+        var exact = await _ws.RemoveProjectCommandAsync("alpha", "Run debug");
+        Assert.True(exact.Ok, exact.Message);
+        Assert.Equal("Build", Assert.Single((await _ws.ListProjectCommandsAsync("alpha")).Commands).Group);
+    }
+
+    [Fact]
     public async Task AnArtifact_IsPinned_Listed_AndUnpinned()
     {
         var file = Path.Combine(_projects, "alpha", "report.md");

@@ -426,7 +426,9 @@ public sealed partial class FirepitWorkspace
                 Window:          spec.Window,
                 LongRunning:     spec.LongRunning,
                 KeepOpenOnError: spec.KeepOpenOnError,
-                Group:           spec.Group);
+                Group:           spec.Group,
+                Description:     spec.Description,
+                Bar:             spec.Bar);
 
             var beforeCount = existing.Commands?.Count ?? 0;
             var merged      = ProjectCommandMutator.Upsert(existing.Commands, newCommand);
@@ -477,6 +479,14 @@ public sealed partial class FirepitWorkspace
             if (existing is null || existing.Commands is null || existing.Commands.Count == 0)
             {
                 return new ToolCallResult(true, $"No command '{commandName}' to remove in {project.Name} (nothing configured)");
+            }
+
+            var ambiguous = ProjectCommandMutator.Ambiguous(existing.Commands, commandName);
+            if (ambiguous.Count > 0)
+            {
+                return new ToolCallResult(false,
+                    $"'{commandName}' is more than one command in {project.Name}: {string.Join(", ", ambiguous)}. " +
+                    "Pass the group too, e.g. '" + ambiguous[0] + "'.");
             }
 
             var (updatedCommands, removed) = ProjectCommandMutator.RemoveByName(existing.Commands, commandName);
@@ -637,7 +647,9 @@ public sealed partial class FirepitWorkspace
         LongRunning:     c.LongRunning,
         KeepOpenOnError: c.KeepOpenOnError,
         Group:           c.Group,
-        Disabled:        c.Disabled);
+        Disabled:        c.Disabled,
+        Description:     c.Description,
+        Bar:             c.Bar);
 
     public Task<InboxWriteResult> SendInboxAsync(string fromProject, string toProject,
                                                  string subject, string body, string priority) =>

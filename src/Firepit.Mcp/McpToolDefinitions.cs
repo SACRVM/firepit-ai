@@ -6,11 +6,19 @@ namespace Firepit.Mcp;
 /// </summary>
 internal static class McpToolDefinitions
 {
+    /// <summary>
+    /// Tools that act on tabs of a Firepit shell. Without one (the daemon:
+    /// sessions live in Claude Code) they are left out of tools/list, so no
+    /// session spends attention on tools that can only say "no shell".
+    /// </summary>
+    public static readonly IReadOnlySet<string> ShellOnly =
+        new HashSet<string>(StringComparer.Ordinal) { "firepit_open_tab", "firepit_focus_tab", "firepit_close_tab" };
+
     public static readonly IReadOnlyList<McpToolDefinitionRaw> All =
     [
         new("firepit_list_projects",
             "List every project Firepit knows about (discovered + manual entries). " +
-            "Returns name, path, adapter id, and whether the project currently has an open tab.",
+            "Returns name, path and adapter id. Address projects in the other tools by the name given here.",
             """
             { "type": "object", "properties": {}, "additionalProperties": false }
             """),
@@ -22,7 +30,7 @@ internal static class McpToolDefinitions
             "'firepit' blueprint so .firepit/config.json, git hygiene and the CLAUDE.md " +
             "conventions are scaffolded in the same call (falls back to the plain first-scaffold " +
             "hardening when no .firepit meta project exists). Right after this returns, " +
-            "firepit_open_tab / firepit_knowledge_add {scope} / firepit_blueprint_* all work " +
+            "firepit_knowledge_add {scope}, firepit_send_to and firepit_blueprint_* all work " +
             "against the new project. Idempotent: an already-registered path returns ok with a " +
             "note (and still re-applies the blueprint when requested).",
             """
@@ -45,9 +53,9 @@ internal static class McpToolDefinitions
             "elsewhere only change their display name), migrates the Claude Code history key " +
             "under ~/.claude/projects so chat history and auto-memory don't orphan, updates " +
             ".firepit/config.json id plus the settings.json registry entry, and reloads the " +
-            "project list. The project's tab must be CLOSED first (firepit_close_tab) — the " +
-            "running agent process itself holds the folder as its working directory, which no " +
-            "one can rename around. If the history migration fails the folder rename is rolled " +
+            "project list. Close the Claude Code sessions running in the project first: a " +
+            "session keeps the folder it started in, and one left open goes on working in a " +
+            "path that no longer exists. If the history migration fails the folder rename is rolled " +
             "back; later metadata steps degrade to warnings instead of rolling back a successful " +
             "rename. Address the source by 'from' (name; empty string is valid) or by 'fromPath' " +
             "when the name is blank or ambiguous.",
@@ -67,8 +75,8 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_open_tab",
-            "Open a tab for a project (or focus the existing one if it's already open). " +
-            "Optionally pass resume=true to launch with --continue.",
+            "Firepit shell only: open a tab for a project (or focus the existing one if it's " +
+            "already open). Optionally pass resume=true to launch with --continue.",
             """
             {
               "type": "object",
@@ -82,8 +90,8 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_focus_tab",
-            "Bring an existing tab into focus and hand keyboard focus to its terminal. " +
-            "No-op if the project isn't open.",
+            "Firepit shell only: bring an existing tab into focus and hand keyboard focus to its " +
+            "terminal. No-op if the project isn't open.",
             """
             {
               "type": "object",
@@ -96,7 +104,7 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_close_tab",
-            "Close the tab for a project, killing the running agent. No-op if not open.",
+            "Firepit shell only: close the tab for a project, killing the running agent. No-op if not open.",
             """
             {
               "type": "object",
@@ -109,14 +117,15 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_reload",
-            "Re-read <project>/.firepit/config.json and apply hot-reloadable parts (quick-links). " +
-            "Pass restart=true to also restart the agent (needed for MCP / agent / env changes).",
+            "Re-read <project>/.firepit/config.json and re-register the project's knowledge " +
+            "scopes (after moving its knowledge, for instance). The commands mod picks config " +
+            "changes up by itself. restart only applies to a session hosted by a Firepit shell.",
             """
             {
               "type": "object",
               "properties": {
                 "projectName": { "type": "string" },
-                "restart":     { "type": "boolean", "description": "Also restart the agent.", "default": false }
+                "restart":     { "type": "boolean", "description": "Firepit shell only: also restart the agent.", "default": false }
               },
               "required": ["projectName"],
               "additionalProperties": false
@@ -173,11 +182,13 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_add_command",
-            "Add (or replace by name — this is an UPSERT, calling it with an existing 'name' " +
-            "replaces that button in place) a toolbar/Run button in a project's .firepit/config.json " +
-            "commands[]. Defaults to the caller's own project. Hot-reloads immediately — no restart. " +
-            "Types: 'shell' spawns command+args; 'claude-prompt' pastes prompt into the live session; " +
-            "'url' opens a browser. To delete a button, use firepit_remove_command. To list " +
+            "Add (or replace — an UPSERT: the same 'name' in the same 'group' replaces that " +
+            "command in place) a project command in .firepit/config.json commands[]. The " +
+            "firepit-commands mod shows it as a button above the prompt and in its panel, and " +
+            "/fire <group> <name> runs it. Name it short and give it a group so the two read as " +
+            "a phrase: group 'Git', name 'status'. Defaults to the caller's own project. " +
+            "Types: 'shell' runs command+args; 'claude-prompt' submits the prompt to the " +
+            "session; 'url' opens a browser. To delete a command, use firepit_remove_command. To list " +
             "current buttons, use firepit_list_commands. Note: this overwrites the JSONC file via " +
             "the structured serializer; the scaffold's tour-of-knobs comments are normalised away " +
             "on first use (the tool's input schema is the canonical reference from then on).",
@@ -185,22 +196,24 @@ internal static class McpToolDefinitions
             {
               "type": "object",
               "properties": {
-                "name":        { "type": "string", "description": "Button label; unique within the project (re-using a name updates that button)." },
+                "name":        { "type": "string", "description": "Short button label, unique within its group, e.g. 'status' (re-using it updates that command)." },
                 "type":        { "type": "string", "enum": ["shell", "claude-prompt", "url"] },
                 "projectName": { "type": "string", "description": "Project to add to; omit for the caller's own project." },
                 "icon":        { "type": "string" },
                 "command":     { "type": "string", "description": "shell: executable, e.g. 'npm'." },
                 "args":        { "type": "array", "items": { "type": "string" }, "description": "shell: e.g. ['run','dev']." },
-                "prompt":      { "type": "string", "description": "claude-prompt: text injected into the PTY." },
+                "prompt":      { "type": "string", "description": "claude-prompt: text submitted to the session as the user's prompt." },
                 "url":         { "type": "string", "description": "url: target; {projectName}/{projectPath} substituted." },
                 "cwd":         { "type": "string", "description": "shell: working dir relative to project root." },
                 "env":         { "type": "object", "additionalProperties": { "type": "string" }, "description": "shell: extra env on the child." },
-                "elevated":    { "type": "boolean", "description": "shell: Windows UAC (run as admin)." },
-                "confirm":     { "type": "boolean", "description": "shell: modal 'Run?' before spawning." },
-                "window":      { "type": "string", "description": "'new' (default) | 'reuse:<id>' (2nd click focuses existing window) | 'inline' (write into this tab's PTY)." },
-                "longRunning": { "type": "boolean", "description": "shell: live running-indicator + right-click Stop kills the tree. Pair with reuse:<id> for watchers (npm run dev)." },
-                "keepOpenOnError": { "type": "boolean", "description": "shell (windowed): close the console on success, keep it open on a non-zero exit so the error is readable. Replaces blanket -NoExit / '; pause'. Ignored for window:'inline'." },
-                "group":       { "type": "string", "description": "Opt-in toolbar grouping. Commands sharing a group label collapse into one dropdown button (e.g. 'Run' for Build & Run / Debug / Release). Omit to render as a standalone button." }
+                "elevated":    { "type": "boolean", "description": "shell: Windows only (run as admin); ignored on Linux." },
+                "confirm":     { "type": "boolean", "description": "shell: ask 'Run?' before running (state-changing commands)." },
+                "window":      { "type": "string", "description": "'new' (default: a terminal window) | 'reuse:<id>' (one at a time per id) | 'inline' (runs in the background; the output comes back in the chat, where the session can read it)." },
+                "longRunning": { "type": "boolean", "description": "shell: keeps running in the background (a systemd user unit) with a running indicator, stop and logs. Pair with reuse:<id> for servers and watchers." },
+                "keepOpenOnError": { "type": "boolean", "description": "shell, in a window: close it on success, keep it open on a non-zero exit so the error is readable. Ignored for window 'inline'." },
+                "group":       { "type": "string", "description": "The area the command belongs to: 'Run', 'Build', 'Test', 'Git'. Commands of a group sit together in the bar and the panel." },
+                "description": { "type": "string", "description": "One sentence the panel shows next to the button: what it does, not how." },
+                "bar":         { "type": "boolean", "description": "false keeps the command out of the bar above the prompt; the panel always lists it.", "default": true }
               },
               "required": ["name", "type"],
               "additionalProperties": false
@@ -208,7 +221,7 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_list_commands",
-            "List a project's current toolbar commands (the entries in .firepit/config.json " +
+            "List a project's commands (the entries in .firepit/config.json " +
             "commands[]). Defaults to the caller's own project. Read-only — covers 'find' too " +
             "via client-side filtering. Returns name/type/icon plus the type-specific fields.",
             """
@@ -222,14 +235,15 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_remove_command",
-            "Remove a toolbar command by name (case-insensitive). Idempotent — removing a name " +
-            "that doesn't exist returns Ok with a 'not found' note. Defaults to the caller's " +
-            "own project. Hot-reloads immediately.",
+            "Remove a project command by its phrase ('Git status') or bare name (case-insensitive); " +
+            "a bare name that several groups share must be given with its group. Idempotent — " +
+            "removing a name that doesn't exist returns Ok with a 'not found' note. Defaults to " +
+            "the caller's own project.",
             """
             {
               "type": "object",
               "properties": {
-                "name":        { "type": "string", "description": "Button label to remove." },
+                "name":        { "type": "string", "description": "The command to remove: 'Git status', or 'status' when only one group has it." },
                 "projectName": { "type": "string", "description": "Project to remove from; omit for the caller's own project." }
               },
               "required": ["name"],
@@ -400,20 +414,20 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_artifact_add",
-            "Pin a file into the project's artifact pane (the paperclip panel) so the user can " +
+            "Pin a file into the project's artifact list (the Artifacts section of the Firepit panel) so the user can " +
             "open it without hunting through folders. USE THIS whenever you produce something " +
             "the user will want to look at: a report, screenshot, diagram, generated image, " +
             "log excerpt, build output, or an executable you just built for them to run. " +
             "Links only — the file stays where it is and removing the entry never deletes it. " +
             "Upsert by file: re-adding the same path updates its label and note in place. " +
-            "Executables are marked with a run icon in the pane, so linking one is fine and " +
-            "honest. To drop an entry use firepit_artifact_remove.",
+            "Markdown and text open in the panel's viewer, everything else in its own program. " +
+            "To drop an entry use firepit_artifact_remove.",
             """
             {
               "type": "object",
               "properties": {
                 "path":        { "type": "string", "description": "File to link. Absolute, or relative to the project root (relative keeps working on another machine)." },
-                "label":       { "type": "string", "description": "Display name in the pane; defaults to the file name." },
+                "label":       { "type": "string", "description": "Display name in the list; defaults to the file name." },
                 "note":        { "type": "string", "description": "One line of context, e.g. 'crash repro, step 4'." },
                 "projectName": { "type": "string", "description": "Project to add to; omit for the caller's own project." }
               },
@@ -423,10 +437,10 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_artifact_remove",
-            "Remove a link from the project's artifact pane. The file on disk is never touched — " +
-            "this only unpins it. Address it by 'path' or by the 'label' shown in the pane. " +
+            "Remove a link from the project's artifact list. The file on disk is never touched — " +
+            "this only unpins it. Address it by 'path' or by the 'label' shown in the list. " +
             "Idempotent: removing something that isn't pinned returns ok with a note. Use this " +
-            "to clear artifacts that have gone stale rather than letting the pane silt up.",
+            "to clear artifacts that have gone stale rather than letting the list silt up.",
             """
             {
               "type": "object",
@@ -440,7 +454,7 @@ internal static class McpToolDefinitions
             """),
 
         new("firepit_artifact_list",
-            "List what is currently pinned in the project's artifact pane: path, label, note, " +
+            "List what is currently pinned in the project's artifact list: path, label, note, " +
             "kind (image/markdown/text/document/executable/archive/other) and whether the target " +
             "still exists. Read-only. Check this before adding, so you update an existing entry " +
             "instead of piling up near-duplicates, and to spot dead links (exists=false).",
@@ -464,11 +478,11 @@ internal static class McpResourceDefinitions
     [
         new("firepit://projects",
             "Projects",
-            "Current project list with open/closed status and live session state.",
+            "Current project list: name, path, adapter.",
             "application/json"),
         new("firepit://sessions",
             "Open sessions",
-            "Tabs currently open in Firepit, with their activity state (Burning/Embers/Dead).",
+            "Firepit shell only: tabs currently open, with their activity state (Burning/Embers/Dead).",
             "application/json"),
         new("firepit://settings",
             "Effective settings",
@@ -478,7 +492,7 @@ internal static class McpResourceDefinitions
         new("firepit://config-schema",
             "Project config schema",
             "Canonical scaffold/schema for .firepit/config.json (JSONC with the full tour of knobs: " +
-            "quickLinks, mcpActivations, agent, session, commands, scheduledJobs, runs). Read this " +
+            "commands, scheduledJobs, runs). Read this " +
             "instead of guessing the shape when hand-editing a project's config.json.",
             "application/jsonc"),
     ];

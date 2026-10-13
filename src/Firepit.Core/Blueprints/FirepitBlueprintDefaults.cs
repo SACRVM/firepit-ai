@@ -13,7 +13,7 @@ public static class FirepitBlueprintDefaults
 
     public const string Description =
         "Standard Firepit project layout: shared-config git hygiene, " +
-        "inbox convention, knowledge base, artifact pane.";
+        "inbox convention, knowledge base, artifact list.";
 
     /// <summary>Idempotency marker for the shared-fragment imports.</summary>
     public const string FragmentsSectionMarker = FirepitFragments.SectionMarker;
@@ -56,8 +56,8 @@ public static class FirepitBlueprintDefaults
         "When you produce a file the user will want to open — a report, " +
         "screenshot, diagram, generated image, log excerpt, build output, or " +
         "an executable you built for them to run — pin it with the " +
-        "`firepit_artifact_add` MCP tool so it appears in the project's " +
-        "paperclip pane. Do this as you produce it, not at the end of the " +
+        "`firepit_artifact_add` MCP tool so it appears in the Artifacts list " +
+        "of the project's Firepit panel. Do this as you produce it, not at the end of the " +
         "session; a path buried in scrollback is a path the user has to hunt " +
         "for. Pinning only links the file — it stays where it is, and " +
         "`firepit_artifact_remove` never deletes it. Check " +

@@ -84,7 +84,12 @@ public sealed record ProjectCommand(
     // command with no Group renders as its own button exactly as before, so
     // genuine multi-command projects are never auto-collapsed. A group with a
     // single member also renders as a plain button (a dropdown of one is noise).
-    string? Group = null);
+    string? Group = null,
+    // One sentence the commands panel shows next to the button.
+    string? Description = null,
+    // False keeps the command out of the bar above the prompt; the panel
+    // always lists it. Null means true.
+    bool? Bar = null);
 
 public enum ProjectCommandType
 {

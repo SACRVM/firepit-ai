@@ -67,7 +67,9 @@ public sealed record CommandSummary(
     bool? LongRunning,
     bool? KeepOpenOnError,
     string? Group,
-    bool? Disabled);
+    bool? Disabled,
+    string? Description = null,
+    bool? Bar = null);
 
 public sealed record CommandListResult(
     string Project,
@@ -95,7 +97,9 @@ public sealed record AddCommandSpec(
     string? Window = null,
     bool? LongRunning = null,
     bool? KeepOpenOnError = null,
-    string? Group = null);
+    string? Group = null,
+    string? Description = null,
+    bool? Bar = null);
 
 /// <summary>One knowledge search hit. <see cref="Scope"/> is the scope name
 /// ("global" or a project name) — pass it back to firepit_knowledge_get
