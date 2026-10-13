@@ -43,6 +43,13 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Added
 
+- **Firepit runs without its window.** `Firepit.Workspace` holds everything
+  the MCP tools need — projects, knowledge, inbox, commands, artifacts,
+  blueprints, integrity, rename, scheduled jobs — lifted out of the WPF
+  `MainWindow` it used to live in. Calls are serialised by a gate instead of
+  the UI thread; tab tools answer that no shell is running instead of
+  failing. A session's working directory now finds its project, for clients
+  like Claude Code desktop that do not export a project name.
 - **`${cred:…}` on Linux** resolves from the Secret Service (KWallet,
   GNOME Keyring) through `secret-tool`, under `service=firepit target=<target>`.
 

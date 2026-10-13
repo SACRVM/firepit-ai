@@ -5,6 +5,7 @@
     <Project Path="src/Firepit.Knowledge/Firepit.Knowledge.csproj" />
     <Project Path="src/Firepit.Mcp/Firepit.Mcp.csproj" />
     <Project Path="src/Firepit.Process/Firepit.Process.csproj" />
+    <Project Path="src/Firepit.Workspace/Firepit.Workspace.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/firepit-mcp/Firepit.Mcp.Bridge.csproj" />
@@ -14,5 +15,6 @@
     <Project Path="tests/Firepit.Core.Tests/Firepit.Core.Tests.csproj" />
     <Project Path="tests/Firepit.Knowledge.Tests/Firepit.Knowledge.Tests.csproj" />
     <Project Path="tests/Firepit.Process.Tests/Firepit.Process.Tests.csproj" />
+    <Project Path="tests/Firepit.Workspace.Tests/Firepit.Workspace.Tests.csproj" />
   </Folder>
 </Solution>

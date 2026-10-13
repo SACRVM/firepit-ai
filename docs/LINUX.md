@@ -1,7 +1,7 @@
 # Firepit on Linux
 
 **Target:** v0.31.0 (headless platform)
-**Status:** decided 2026-10-13 — M10 done, M11 next
+**Status:** decided 2026-10-13 — M10 and M11 done, M12 next
 
 ## Decisions (2026-10-13)
 
@@ -287,6 +287,16 @@ Extract the application out of `MainWindow` into a portable
 **Accept:** the WPF shell still builds on Windows against the extracted
 service (a sanity build, not a release); workspace service has tests for
 registry, inbox, MCP backend calls against a fake `ITabHost`.
+
+**Done (2026-10-13), scoped down:** `Firepit.Workspace` holds
+`FirepitWorkspace`, the `IMcpBackend` that used to be `MainWindow` — registry,
+knowledge scopes, inbox, commands, artifacts, blueprints, integrity, rename,
+jobs. A re-entrant gate replaces the dispatcher's serialisation; shell
+concerns go through `ITabHost` (`HeadlessTabHost` without a shell).
+`FindProjectByPath` maps a session's working directory to its project for
+M12. 11 tests, including twelve concurrent project creations. Not done, and
+not needed without a shell of our own: the session controller, inbox
+auto-delivery, the WPF build against the service.
 
 ### M12 — Headless Firepit on Linux
 

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The application without a window: project registry, knowledge scopes,
+       inbox, artifacts, blueprints, integrity, jobs — and the IMcpBackend the
+       MCP host serves. Lifted out of the WPF MainWindow (docs/LINUX.md M11);
+       a shell, if one comes back, sits on top of it through ITabHost. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Firepit.Core/Firepit.Core.csproj" />
+    <ProjectReference Include="../Firepit.Knowledge/Firepit.Knowledge.csproj" />
+    <ProjectReference Include="../Firepit.Mcp/Firepit.Mcp.csproj" />
+    <ProjectReference Include="../Firepit.Process/Firepit.Process.csproj" />
+    <ProjectReference Include="../Firepit.Adapters/Firepit.Adapters.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <!-- Serilog→Microsoft.Extensions.Logging bridge: Firepit.Knowledge logs
+         against ILogger and lands in the same sink. -->
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Firepit.Workspace.Tests" />
+  </ItemGroup>
+
+</Project>
