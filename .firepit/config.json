@@ -1,51 +1,56 @@
 {
-  // Firepit per-project config — see docs/ARCHITECTURE.md §9 for the schema.
-  // JSONC: comments and trailing commas are allowed.
-  // Edit and save — quickLinks and commands hot-reload; mcpActivations,
-  // agent, and session.envOverrides need a session restart (Firepit shows a
-  // banner when that happens).
+  // Firepit per-project config. JSONC: comments and trailing commas are allowed.
+  // Commands follow the Linux patterns of ../firepit-template/.firepit/config.json:
+  // a group per area, a short lowercase name, a one-line description.
 
   "version": 1,
   "id": "firepit-ai",
 
-  "quickLinks": [
-  ],
-
-  // Toolbar URL buttons. {projectName} and {projectPath} are substituted.
-  // "quickLinks": [
-  //   { "name": "GitHub", "url": "https://github.com/<you>/{projectName}" },
-  //   { "name": "Docs",   "url": "https://your-docs.example.com/{projectName}" }
-  // ],
-
-  // Activate MCP servers from the global registry (settings.json -> mcpServers).
-  // Optional per-server overrides for args/env/headers.
-  // "mcpActivations": [
-  //   { "id": "firepit" },
-  //   { "id": "fishbowl",
-  //     "headerOverrides": { "Authorization": "Bearer ${cred:firepit/fishbowl-firepit-ai}" } }
-  // ],
-
-  // Per-project agent override. If omitted, falls back to settings.defaultAgent.
-  // "agent": {
-  //   "command": "claude",
-  //   "args": ["--model", "sonnet"],
-  //   "envOverrides": { "ANTHROPIC_LOG": "info" }
-  // },
-
-  // Extra env vars on the PTY child (the agent + everything it spawns).
-  // "session": {
-  //   "envOverrides": { "MY_VAR": "value" }
-  // },
-
-  // Custom toolbar commands. Three types:
-  //   "shell"         — spawn Command + Args in the project dir (new window)
-  //   "claude-prompt" — paste Prompt into the live session as if you typed it
-  //   "url"           — open Url in the default browser
   "commands": [
-    { "name": "Run",   "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "./run.ps1"], "window": "new" },
-    { "name": "Build", "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "dotnet build Firepit.slnx -c Release"], "window": "new" },
-    { "name": "Tests", "type": "shell", "command": "powershell", "args": ["-NoExit", "-Command", "dotnet test Firepit.slnx"], "window": "new" }
-  ,
-    { "name": "GitHub", "type": "url", "url": "https://github.com/SACRVM/firepit-ai", "icon": "🐙" }
+    {
+      "group": "Build",
+      "name": "debug",
+      "description": "Builds the solution (Debug).",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "Firepit.slnx"],
+      "keepOpenOnError": true
+    },
+    {
+      "group": "Build",
+      "name": "release",
+      "description": "Builds the solution (Release).",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["build", "Firepit.slnx", "-c", "Release"],
+      "keepOpenOnError": true
+    },
+
+    {
+      "group": "Test",
+      "name": "all",
+      "description": "Runs every test project; the summary lands in the panel.",
+      "type": "shell",
+      "command": "dotnet",
+      "args": ["test", "Firepit.slnx"],
+      "window": "inline"
+    },
+
+    {
+      "group": "Git",
+      "name": "status",
+      "description": "Branch and changed files.",
+      "type": "shell",
+      "command": "git",
+      "args": ["status", "--short", "--branch"],
+      "window": "inline"
+    },
+    {
+      "group": "Git",
+      "name": "repo",
+      "description": "Opens the repository on GitHub.",
+      "type": "url",
+      "url": "https://github.com/SACRVM/firepit-ai"
+    }
   ]
 }
