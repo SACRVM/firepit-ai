@@ -23,6 +23,22 @@ internal static class McpToolDefinitions
             { "type": "object", "properties": {}, "additionalProperties": false }
             """),
 
+        new("firepit_open_project",
+            "Open a project in the Claude desktop app: its main session (the most recently " +
+            "active one in the project's folder) or, when it has none, a new session there. " +
+            "Use it when the user asks to open, switch to or start working in a project. A " +
+            "unique prefix of the name is enough ('vec' for vectorizer).",
+            """
+            {
+              "type": "object",
+              "properties": {
+                "projectName": { "type": "string", "description": "Project name as firepit_list_projects reports it, or a unique prefix of it." }
+              },
+              "required": ["projectName"],
+              "additionalProperties": false
+            }
+            """),
+
         new("firepit_create_project",
             "Create/register a project with Firepit — the agent-driven 'new project' flow, no UI " +
             "step, no restart. Ensures the folder exists (default {projectsRoot}/{name} when path " +

@@ -199,6 +199,30 @@ public sealed partial class FirepitWorkspace
                 ? await _tabs.OpenAsync(project, resume).ConfigureAwait(false)
                 : new ToolCallResult(false, $"Unknown project: {projectName}"));
 
+    public Task<ToolCallResult> OpenProjectAsync(string projectName) =>
+        Serialized(() =>
+        {
+            var project = FindProjectByName(projectName);
+            if (project is null)
+            {
+                // "vec" for vectorizer: what a person types into a launcher.
+                var matches = _allProjects
+                    .Where(p => p.Name.StartsWith(projectName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (matches.Count > 1)
+                {
+                    return new ToolCallResult(false,
+                        $"'{projectName}' could be {string.Join(", ", matches.Select(p => p.Name))}. Name one.");
+                }
+                project = matches.FirstOrDefault();
+            }
+            if (project is null) return new ToolCallResult(false, UnknownProject(projectName));
+
+            var outcome = _projectOpener.Open(project.Name, project.Path);
+            Log.Information("open_project: {Project}: {Message}", project.Name, outcome.Message);
+            return new ToolCallResult(outcome.Ok, outcome.Message);
+        });
+
     public Task<ToolCallResult> FocusTabAsync(string projectName) =>
         Serialized(async () =>
             FindProjectByName(projectName) is { } project

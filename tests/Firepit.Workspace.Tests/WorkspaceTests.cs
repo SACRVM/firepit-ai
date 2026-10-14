@@ -1,3 +1,4 @@
+using Firepit.Core.Desktop;
 using Firepit.Core.Settings;
 using Firepit.Core.State;
 using Firepit.Mcp;
@@ -14,6 +15,18 @@ public sealed class WorkspaceTests : IAsyncLifetime
     private readonly string _projects;
     private readonly JsonSettingsStore _settingsStore;
     private FirepitWorkspace _ws = null!;
+    private readonly RecordingOpener _opener = new();
+
+    private sealed class RecordingOpener : IProjectOpener
+    {
+        public List<string> Opened { get; } = [];
+
+        public ProjectOpenOutcome Open(string projectName, string projectPath)
+        {
+            Opened.Add(projectPath);
+            return new ProjectOpenOutcome(true, $"Opened {projectName}.");
+        }
+    }
 
     public WorkspaceTests()
     {
@@ -34,7 +47,8 @@ public sealed class WorkspaceTests : IAsyncLifetime
             _settingsStore,
             new JsonStateStore(Path.Combine(_root, "state", "state.json")),
             runJobs: false,
-            knowledgeDataRoot: "");
+            knowledgeDataRoot: "",
+            projectOpener: _opener);
         await _ws.StartAsync();
     }
 
@@ -172,6 +186,26 @@ public sealed class WorkspaceTests : IAsyncLifetime
         var exact = await _ws.RemoveProjectCommandAsync("alpha", "Run debug");
         Assert.True(exact.Ok, exact.Message);
         Assert.Equal("Build", Assert.Single((await _ws.ListProjectCommandsAsync("alpha")).Commands).Group);
+    }
+
+    [Fact]
+    public async Task AProject_OpensByName_OrByAUniquePrefix()
+    {
+        Assert.True((await _ws.OpenProjectAsync("beta")).Ok);
+        Assert.True((await _ws.OpenProjectAsync("BE")).Ok);
+        Assert.Equal([Path.Combine(_projects, "beta"), Path.Combine(_projects, "beta")], _opener.Opened);
+
+        // "alpha" is a name of its own, even though "alpha-two" starts with it.
+        Assert.True((await _ws.OpenProjectAsync("alpha")).Ok);
+        Assert.Equal(Path.Combine(_projects, "alpha"), _opener.Opened[^1]);
+
+        var vague = await _ws.OpenProjectAsync("al");
+        Assert.False(vague.Ok);
+        Assert.Contains("alpha-two", vague.Message);
+
+        var unknown = await _ws.OpenProjectAsync("gamma");
+        Assert.False(unknown.Ok);
+        Assert.Equal(3, _opener.Opened.Count);
     }
 
     [Fact]

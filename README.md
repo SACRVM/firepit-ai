@@ -69,6 +69,11 @@ Claude Code (desktop app, CLI): one session per project
   derives with what is on disk: the knowledge index against the documents,
   the `CLAUDE.md` imports, blueprint conformance. With `repair` it rebuilds
   what it derived. It never edits a document of yours.
+- **One click to a project.** The start menu gets a *Projects* submenu with
+  every project, and KRunner finds them too (Alt+Space, `vec`, Enter). An
+  entry opens the project's session in the Claude desktop app, the most
+  recent one in its folder, or starts one there. `/fire open vectorizer` and
+  `firepit_open_project` do the same from inside a session.
 - **Projects.** Every folder under the projects root that has a `CLAUDE.md`
   or a `.claude/` folder is a project. Each session finds its project from
   the folder it runs in. You can also create and rename projects
@@ -158,6 +163,7 @@ panel, the inbox modes and `/fire`.
 | The MCP socket | `$XDG_RUNTIME_DIR/firepit/mcp.sock` (mode 0600) |
 | Global knowledge, shared `CLAUDE.md` fragments, blueprints | `<projects root>/.firepit/`, the central project |
 | The service | `systemctl --user status firepit`, `journalctl --user -u firepit -f` |
+| Start menu entries | `~/.local/share/applications/firepit/`, the *Projects* submenu in `~/.config/menus/applications-merged/firepit-projects.menu` |
 
 Secrets in settings are referenced as `${env:NAME}` or `${cred:<target>}`
 and never stored as plain values. A `cred:` reference is looked up in the

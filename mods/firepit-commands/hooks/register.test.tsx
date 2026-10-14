@@ -77,7 +77,8 @@ function world(on: On, ran: Ran = [], submitted: string[] = []): World {
   on('mcp.call', (_$, e) => {
     w.tools.push({ tool: e.tool, args: e.args })
     if (e.tool === 'firepit_inbox_complete') w.files.delete(`${INBOX}/${String(e.args.id)}`)
-    return { value: { content: [{ type: 'text', text: '{"ok":true}' }], isError: false } }
+    const message = e.tool === 'firepit_open_project' ? `Opened ${String(e.args.projectName)}.` : 'Done.'
+    return { value: { content: [{ type: 'text', text: JSON.stringify({ ok: true, message }) }], isError: false } }
   })
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.close', () => ({ value: undefined }))
@@ -165,7 +166,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on)
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit-commands 0.4.0')
+  expect(before.text).toContain('firepit-commands 0.5.0')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')
@@ -290,4 +291,13 @@ test('with the inbox off, or a prompt being typed, nothing is handed over', asyn
   expect(w.submitted.length).toBe(1)
   expect(w.submitted[0].text).toContain('act on arrivals')
   await pane.unmount()
+})
+
+test('/fire open hands the project to Firepit, which opens it in Claude', async ($, on) => {
+  const w = world(on)
+  const opened = await $.command.run({ command: 'fire', args: 'open vec' })
+  expect(w.tools).toContainEqual({ tool: 'firepit_open_project', args: { projectName: 'vec' } })
+  expect(opened.text).toBe('Opened vec.')
+  const bare = await $.command.run({ command: 'fire', args: 'open' })
+  expect(bare.text).toContain('Which project?')
 })

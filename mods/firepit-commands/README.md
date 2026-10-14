@@ -30,6 +30,8 @@ Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
   (such as a Windows path) says *missing*. *unpin* is
   `firepit_artifact_remove`; the file stays.
 - **`/fire`** opens the panel, `/fire git status` runs a command,
+  `/fire open vectorizer` switches to another project's session (or starts
+  one; `firepit_open_project`),
   `/fire inbox` and `/fire artifacts` list them in the chat, `/fire trust`
   trusts the project's shell commands, `/fire status` says which version is
   loaded and what runs, `/fire reload` rereads everything.

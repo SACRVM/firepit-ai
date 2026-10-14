@@ -24,7 +24,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.4.0'
+const VERSION = '0.5.0'
 const PANE = 'firepit-commands'
 const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'
@@ -465,25 +465,34 @@ async function sweepRecords($: $): Promise<void> {
   }
 }
 
-/** Calls a Firepit tool; resolves an error to show, or null when it worked. */
-async function firepitTool($: $, tool: string, args: Record<string, unknown>): Promise<string | null> {
+/** Calls a Firepit tool: `ok`, and what it said (its message, or what went wrong). */
+async function callFirepit($: $, tool: string, args: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
   let result: McpToolResult
   try {
     result = await $.mcp.call(MCP, tool, args)
   } catch (error) {
-    return `Firepit did not answer (${error instanceof Error ? error.message : String(error)}). Is its MCP server connected? See /mcp.`
+    return {
+      ok: false,
+      message: `Firepit did not answer (${error instanceof Error ? error.message : String(error)}). Is its MCP server connected? See /mcp.`,
+    }
   }
   const text = result.content.map(c => c.text ?? '').join('')
-  if (result.isError) return text || `${tool} failed.`
+  if (result.isError) return { ok: false, message: text || `${tool} failed.` }
   try {
     const parsed = JSON.parse(text) as Record<string, unknown>
-    const ok = parsed.ok ?? parsed.Ok
+    const ok = (parsed.ok ?? parsed.Ok) !== false
     const message = parsed.message ?? parsed.Message
-    if (ok === false) return typeof message === 'string' && message !== '' ? message : `${tool} failed.`
+    return { ok, message: typeof message === 'string' && message !== '' ? message : ok ? text : `${tool} failed.` }
   } catch {
     // Not JSON: the tool said something in words, which is fine.
+    return { ok: true, message: text }
   }
-  return null
+}
+
+/** Calls a Firepit tool; resolves an error to show, or null when it worked. */
+async function firepitTool($: $, tool: string, args: Record<string, unknown>): Promise<string | null> {
+  const { ok, message } = await callFirepit($, tool, args)
+  return ok ? null : message
 }
 
 async function setMode($: $, mode: InboxMode): Promise<void> {
@@ -628,7 +637,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'fire',
-      description: 'Firepit: /fire opens the panel, /fire git status runs a command; also inbox, artifacts, reload, trust, status',
+      description: 'Firepit: /fire opens the panel, /fire git status runs a command, /fire open <project> switches project; also inbox, artifacts, reload, trust, status',
       argumentHint: '[group] [command]',
       immediate: true,
     })
@@ -687,6 +696,11 @@ export const register: Register = on => {
       await readArtifactLinks($, true)
       const cfg = await read($, loaded)
       return { text: cfg === null ? `No ${CONFIG} in this project.` : `Read ${cfg.commands.length} commands.` }
+    }
+    if (query === 'open' || query.startsWith('open ')) {
+      const name = query.slice(4).trim()
+      if (name === '') return { text: 'Which project? /fire open vectorizer (a unique start of the name is enough).' }
+      return { text: (await callFirepit($, 'firepit_open_project', { projectName: name })).message }
     }
     if (query === 'inbox') return { text: inboxText(await readInbox($, true), await read($, inboxMode)) }
     if (query === 'artifacts') {

@@ -1,6 +1,6 @@
 {
   "name": "firepit-commands",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Firepit in Claude Code: the project commands from .firepit/config.json as a button row and a panel, the project inbox with hand-over to Claude, and the pinned artifacts; /fire.",
   "types": "./types/index.d.ts",
   "author": {

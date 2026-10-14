@@ -105,7 +105,7 @@ at once.
   session reads it, so it has a size budget enforced by a test, and it must
   be English.
 - **Tools.**
-  - Projects: `firepit_list_projects`, `_create_project`,
+  - Projects: `firepit_list_projects`, `_open_project`, `_create_project`,
     `_rename_project`, `_reload`.
   - Commands: `firepit_add_command`, `_list_commands`, `_remove_command`.
   - Inbox: `firepit_send_to`, `firepit_inbox_list`, `_complete`.
@@ -141,6 +141,23 @@ at once.
   (14 files, 10 MB each) and to the console, which systemd puts in the
   journal. Logs name things (projects, tools, message subjects, artifact
   labels) and outcomes; they never contain message bodies or document text.
+- **Start menu.** The default instance keeps a *Projects* submenu in the
+  freedesktop menu: one entry per project in
+  `~/.local/share/applications/firepit/`, a merged menu in
+  `~/.config/menus/applications-merged/` and its `.directory` file. It syncs
+  them at start and after every rescan that changed the project list, then
+  asks KDE to rebuild its menu cache (`kbuildsycoca6`). A named instance
+  writes no entries.
+- **Opening a project.** `firepitd open <folder>`, which is what the entries
+  run, and `firepit_open_project` open the project in the Claude desktop
+  app. They pick the most recently active session the app keeps in that
+  folder (read from the app's own records under
+  `~/.config/Claude/claude-code-sessions/`, skipped when unreadable; worktree
+  and archived sessions do not count) and open it with
+  `claude://claude.ai/epitaxy/<id>`. With no such session they start one with
+  `claude://code/new?folder=<folder>`. Inside the service the link goes
+  through `systemd-run`, so a Claude app started that way does not belong to
+  the service and survive its restarts.
 - **Units.** `packaging/systemd/firepit.service` and `firepit@.service` run
   `~/.local/opt/firepit/firepitd` with `Restart=on-failure`. The PATH includes
   `~/.local/bin` and `~/.dotnet/tools`. `scripts/install-linux.sh` publishes

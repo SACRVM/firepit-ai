@@ -80,6 +80,13 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Added
 
+- **Every project in the start menu.** firepitd keeps a *Projects* submenu
+  with one entry per project, found by KRunner too. An entry opens the
+  project in the Claude desktop app: the most recent session in its folder,
+  or a new session there. The same from inside a session: `/fire open
+  vectorizer` in the mod, `firepit_open_project` for Claude (a unique prefix
+  of the name is enough). The entries follow the project list on every
+  rescan; only the default instance writes them.
 - **Project commands in Claude Code**: the `firepit-commands` mod
   (`mods/firepit-commands`) puts the commands from `.firepit/config.json`
   into a button bar above the prompt (`Git:` status repo), a panel with

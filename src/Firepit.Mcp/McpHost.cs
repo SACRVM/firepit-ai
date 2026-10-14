@@ -460,6 +460,14 @@ public sealed class McpHost : IDisposable
                     to.Trim(), renameFolder, migrateHistory);
                 return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.RenameProjectResult)));
             }
+            case "firepit_open_project":
+            {
+                var project = args["projectName"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(project))
+                    return BuildErrorResponse(id, -32602, "missing 'projectName'");
+                var result = await _backend.OpenProjectAsync(project);
+                return BuildResult(id, BuildContentJson(JsonSerializer.Serialize(result, McpJsonContext.Default.ToolCallResult)));
+            }
             case "firepit_open_tab":
             {
                 var project = args["projectName"]?.GetValue<string>();

@@ -32,6 +32,11 @@ public interface IMcpBackend
                                                          bool renameFolder, bool migrateHistory);
 
     Task<ToolCallResult>              OpenTabAsync(string projectName, bool resume);
+
+    /// <summary>Open a project in the Claude desktop app: its most recent
+    /// session in the project folder, or a new one there. A unique prefix of
+    /// a project name is enough.</summary>
+    Task<ToolCallResult>              OpenProjectAsync(string projectName);
     Task<ToolCallResult>              FocusTabAsync(string projectName);
     Task<ToolCallResult>              CloseTabAsync(string projectName);
     Task<ToolCallResult>              ReloadAsync(string projectName, bool restart);
