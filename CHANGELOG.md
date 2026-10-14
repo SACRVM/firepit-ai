@@ -7,6 +7,10 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Changed
 
+- **The plugin is called `firepit`** (`mods/firepit`), no longer
+  `firepit-commands`: it carries skills now as well as the commands, inbox
+  and artifacts. Reinstall it as `firepit@firepit`; trust and inbox modes are
+  asked for again once.
 - **main is Linux-first.** v0.30.0 is the last Windows release; the WPF
   shell, the WebView2 terminal and the Inno installer stay on the
   `windows-legacy` branch. CI runs on ubuntu-latest, and the decision record
@@ -80,6 +84,15 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Added
 
+- **Skills for how Firepit projects are run**, in the plugin:
+  `firepit:setup` (setting a project up or migrating it: blueprint,
+  `.mcp.json`, `CLAUDE.md`, `.gitignore`, knowledge placement, Windows
+  leftovers), `firepit:commands` (naming, groups, inline output, servers,
+  trust, the Linux patterns), `firepit:messages` (when and how to message
+  another project, handling and completing, never forwarding) and
+  `firepit:knowledge` (search first, what to save, scope, pinning, public
+  repositories). The server instructions point every session at them; a test
+  holds their tool names to the real catalogue.
 - **Every project in the start menu.** firepitd keeps a *Projects* submenu
   with one entry per project, found by KRunner too. An entry opens the
   project in the Claude desktop app: the most recent session in its folder,
@@ -87,8 +100,8 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   vectorizer` in the mod, `firepit_open_project` for Claude (a unique prefix
   of the name is enough). The entries follow the project list on every
   rescan; only the default instance writes them.
-- **Project commands in Claude Code**: the `firepit-commands` mod
-  (`mods/firepit-commands`) puts the commands from `.firepit/config.json`
+- **Project commands in Claude Code**: the `firepit` mod
+  (`mods/firepit`) puts the commands from `.firepit/config.json`
   into a button bar above the prompt (`Git:` status repo), a panel with
   descriptions, logs and output, and `/fire`. Long-running commands run as
   systemd user units, windowed ones in Konsole; shell commands wait for

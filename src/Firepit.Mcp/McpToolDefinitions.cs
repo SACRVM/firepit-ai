@@ -200,7 +200,7 @@ internal static class McpToolDefinitions
         new("firepit_add_command",
             "Add (or replace — an UPSERT: the same 'name' in the same 'group' replaces that " +
             "command in place) a project command in .firepit/config.json commands[]. The " +
-            "firepit-commands mod shows it as a button above the prompt and in its panel, and " +
+            "firepit plugin shows it as a button above the prompt and in its panel, and " +
             "/fire <group> <name> runs it. Name it short and give it a group so the two read as " +
             "a phrase: group 'Git', name 'status'. Defaults to the caller's own project. " +
             "Types: 'shell' runs command+args; 'claude-prompt' submits the prompt to the " +

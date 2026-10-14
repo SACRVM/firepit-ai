@@ -1,14 +1,14 @@
 {
   "name": "firepit",
-  "description": "Firepit's Claude Code mods — read straight from this repository.",
+  "description": "Firepit for Claude Code — read straight from this repository.",
   "owner": {
     "name": "SACRVM"
   },
   "plugins": [
     {
-      "name": "firepit-commands",
-      "source": "./mods/firepit-commands",
-      "description": "Project commands from .firepit/config.json in Claude Code: a button bar above the prompt, a panel, and /fire."
+      "name": "firepit",
+      "source": "./mods/firepit",
+      "description": "Project commands, inbox and artifacts in Claude Code (a button bar, a panel, /fire), and skills for how Firepit projects are run."
     }
   ]
 }

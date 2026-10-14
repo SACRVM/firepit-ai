@@ -24,7 +24,7 @@ the interface.
 
 ```
 Claude Code (desktop app, CLI): one session per project
- ├─ firepit-commands mod ─ bar · panel · /fire: commands, inbox, artifacts
+ ├─ firepit plugin ─────── bar · panel · /fire · skills: commands, inbox, artifacts
  └─ MCP server "firepit" ─ firepit-mcp, a stdio bridge
                              │  Unix socket, $XDG_RUNTIME_DIR/firepit/mcp.sock
                              ▼
@@ -74,6 +74,11 @@ Claude Code (desktop app, CLI): one session per project
   entry opens the project's session in the Claude desktop app, the most
   recent one in its folder, or starts one there. `/fire open vectorizer` and
   `firepit_open_project` do the same from inside a session.
+- **Skills for how it is done.** The plugin brings four skills that agents
+  load when the work calls for them: `firepit:setup` (a project's Firepit
+  setup and migration), `firepit:commands`, `firepit:messages` and
+  `firepit:knowledge`. Every project gets the same procedures, versioned with
+  the code they describe.
 - **Projects.** Every folder under the projects root that has a `CLAUDE.md`
   or a `.claude/` folder is a project. Each session finds its project from
   the folder it runs in. You can also create and rename projects
@@ -107,13 +112,13 @@ blueprint does it for you, together with the `CLAUDE.md` sections:
 { "mcpServers": { "firepit": { "type": "stdio", "command": "firepit-mcp" } } }
 ```
 
-**Install the mod.** The repository is its own plugin marketplace. The
+**Install the plugin** (the mod and the skills). The repository is its own plugin marketplace. The
 installed mod is read from the working copy, so a `git pull` followed by
 `/reload-plugins` updates it.
 
 ```bash
 claude plugin marketplace add ~/Projects/repos/firepit-ai
-claude plugin install firepit-commands@firepit --scope user
+claude plugin install firepit@firepit --scope user
 ```
 
 On first use, Firepit downloads the embedding model (all-MiniLM-L6-v2, about
@@ -151,7 +156,7 @@ command answers in the chat:
 }
 ```
 
-The [mod's README](mods/firepit-commands/README.md) covers the bar, the
+The [mod's README](mods/firepit/README.md) covers the bar, the
 panel, the inbox modes and `/fire`.
 
 ## Where things live
@@ -175,7 +180,7 @@ Secret Service (KWallet, GNOME Keyring) through `secret-tool`, under
 ```bash
 dotnet build Firepit.slnx
 dotnet test Firepit.slnx
-claude plugin test mods/firepit-commands
+claude plugin test mods/firepit
 ```
 
 | Project | Role |
@@ -187,7 +192,7 @@ claude plugin test mods/firepit-commands
 | `src/Firepit.Daemon` | `firepitd`: the workspace and the MCP host as a service |
 | `src/Firepit.Process`, `src/Firepit.Adapters` | Processes for jobs, the Claude Code command line |
 | `tools/firepit-mcp` | The stdio ↔ socket bridge Claude Code starts |
-| `mods/firepit-commands` | The Claude Code mod |
+| `mods/firepit` | The Claude Code mod |
 
 [`SPEC.md`](SPEC.md) says what Firepit is for and what it is not.
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the technical contract.

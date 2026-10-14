@@ -41,7 +41,7 @@ public static class ProjectConfigScaffold
     public static string BuildScaffold(string projectId) => $$"""
 {
   // Firepit per-project config. JSONC: comments and trailing commas are allowed.
-  // The firepit-commands mod for Claude Code reads it and picks up every save.
+  // The firepit plugin for Claude Code reads it and picks up every save.
 
   "version": 1,
   "id": "{{projectId}}",

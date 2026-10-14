@@ -16,7 +16,7 @@ projects. It has three parts:
   inbox, the artifact links, scheduled jobs and blueprints.
 - **firepit-mcp**, a bridge, gives every Claude Code session those as MCP
   tools.
-- **firepit-commands**, a Claude Code mod, puts the project's commands, inbox
+- **firepit**, a Claude Code plugin, puts the project's commands, inbox
   and artifacts into the Claude Code window.
 
 Claude Code is the interface. Firepit has no window of its own.

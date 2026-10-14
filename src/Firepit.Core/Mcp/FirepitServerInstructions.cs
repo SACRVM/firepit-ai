@@ -55,5 +55,10 @@ public static class FirepitServerInstructions
         Cross-project. firepit_list_projects shows the user's projects, and
         firepit_send_to delivers a message to another project's agent. Address a
         project by the name firepit_list_projects reports for it.
+
+        Procedures. The firepit plugin's skills hold the how-to: firepit:setup
+        (a project's Firepit setup), firepit:commands (project commands),
+        firepit:messages (writing and handling inbox messages), firepit:knowledge
+        (what to save and where). Load the one that fits before doing that work.
         """;
 }

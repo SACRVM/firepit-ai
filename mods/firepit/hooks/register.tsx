@@ -24,8 +24,8 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.5.0'
-const PANE = 'firepit-commands'
+const VERSION = '0.6.0'
+const PANE = 'firepit'
 const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'
 const INBOX = '.firepit/inbox'
@@ -35,20 +35,20 @@ const MCP = 'firepit'
 /** Rows a panel section shows before "all". */
 const SHOWN = 8
 
-const loaded = atom({ plugin: 'firepit-commands', key: 'loaded' } as const, null)
-const running = atom({ plugin: 'firepit-commands', key: 'running' } as const, [])
-const isTrusted = atom({ plugin: 'firepit-commands', key: 'isTrusted' } as const, false)
-const isReviewing = atom({ plugin: 'firepit-commands', key: 'isReviewing' } as const, false)
-const confirming = atom({ plugin: 'firepit-commands', key: 'confirming' } as const, null)
-const logsFor = atom({ plugin: 'firepit-commands', key: 'logsFor' } as const, null)
-const logs = atom({ plugin: 'firepit-commands', key: 'logs' } as const, '')
-const showDetails = atom({ plugin: 'firepit-commands', key: 'showDetails' } as const, false)
-const inbox = atom({ plugin: 'firepit-commands', key: 'inbox' } as const, [])
-const inboxMode = atom({ plugin: 'firepit-commands', key: 'inboxMode' } as const, 'tell')
-const showAllMessages = atom({ plugin: 'firepit-commands', key: 'showAllMessages' } as const, false)
-const artifacts = atom({ plugin: 'firepit-commands', key: 'artifacts' } as const, [])
-const showAllArtifacts = atom({ plugin: 'firepit-commands', key: 'showAllArtifacts' } as const, false)
-const viewing = atom({ plugin: 'firepit-commands', key: 'viewing' } as const, null)
+const loaded = atom({ plugin: 'firepit', key: 'loaded' } as const, null)
+const running = atom({ plugin: 'firepit', key: 'running' } as const, [])
+const isTrusted = atom({ plugin: 'firepit', key: 'isTrusted' } as const, false)
+const isReviewing = atom({ plugin: 'firepit', key: 'isReviewing' } as const, false)
+const confirming = atom({ plugin: 'firepit', key: 'confirming' } as const, null)
+const logsFor = atom({ plugin: 'firepit', key: 'logsFor' } as const, null)
+const logs = atom({ plugin: 'firepit', key: 'logs' } as const, '')
+const showDetails = atom({ plugin: 'firepit', key: 'showDetails' } as const, false)
+const inbox = atom({ plugin: 'firepit', key: 'inbox' } as const, [])
+const inboxMode = atom({ plugin: 'firepit', key: 'inboxMode' } as const, 'tell')
+const showAllMessages = atom({ plugin: 'firepit', key: 'showAllMessages' } as const, false)
+const artifacts = atom({ plugin: 'firepit', key: 'artifacts' } as const, [])
+const showAllArtifacts = atom({ plugin: 'firepit', key: 'showAllArtifacts' } as const, false)
+const viewing = atom({ plugin: 'firepit', key: 'viewing' } as const, null)
 
 // Module variables start over on a hot reload; nothing drawn depends on them.
 let lastRoot = ''
@@ -681,7 +681,7 @@ export const register: Register = on => {
       const active = await read($, running)
       return {
         text: [
-          `firepit-commands ${VERSION}`,
+          `firepit ${VERSION}`,
           cfg === null ? `No ${CONFIG} in ${await $.session.root()}` : `${cfg.root}/${CONFIG}: ${cfg.commands.length} commands`,
           `trusted: ${(await read($, isTrusted)) ? 'yes' : 'no'}`,
           `running: ${active.length === 0 ? 'nothing' : active.join(', ')}`,

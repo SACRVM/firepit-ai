@@ -8,7 +8,7 @@ the lines that must not be crossed. What Firepit is for is in
 
 ```
  Claude Code session (desktop app or CLI)        one per project, many at once
- ├─ firepit-commands mod ───── reads .firepit/ files directly
+ ├─ firepit plugin ─────────── reads .firepit/ files directly
  │                             writes through $.mcp.call("firepit", …)
  └─ firepit-mcp (stdio) ────── started by Claude Code from the project's .mcp.json
         │ length-prefixed JSON frames
@@ -31,7 +31,7 @@ the lines that must not be crossed. What Firepit is for is in
 - **firepit-mcp** (`tools/firepit-mcp`) is a stateless tunnel that lives as
   long as its Claude Code session. Claude Code starts one per session that
   has the `firepit` server in its MCP configuration.
-- **The mod** (`mods/firepit-commands`) runs inside each Claude Code session,
+- **The mod** (`mods/firepit`) runs inside each Claude Code session,
   in the engine's plugin sandbox. It has no state beyond the session's. It
   reads project files, runs commands through `systemd-run`, and writes only
   through Firepit's tools.
@@ -256,7 +256,7 @@ the tools drops the file's comments; the scaffold says so.
 
 ## 7. The mod
 
-`mods/firepit-commands` is a Claude Code plugin with one hooks module
+`mods/firepit` is a Claude Code plugin with one hooks module
 (`hooks/register.tsx`), pure logic beside it (`logic.ts`, `inbox.ts`,
 `artifacts.ts`) and a state contract (`types/index.d.ts`). The repository is
 its own plugin marketplace, so the installed mod is read from the working
@@ -290,6 +290,12 @@ copy.
   - The mode is stored per project root.
 - **Viewer.** Markdown and text (messages, artifacts) open in a second pane,
   up to 60 000 characters.
+- **Skills.** `mods/firepit/skills/<name>/SKILL.md`: `setup`, `commands`,
+  `messages`, `knowledge`, loaded by an agent when its description matches
+  the work. The server instructions name them, so a session knows they
+  exist. `PluginSkillsTests` checks that each names only existing tools, that
+  the instructions point only at existing skills, and that all of it is
+  English.
 
 ## 8. Security boundary
 
@@ -320,7 +326,7 @@ run only there (`WindowsFact`).
   root, including concurrent creates through the gate.
 - Knowledge tests cover the index, both search paths and pointer files.
 
-The mod has `claude plugin test mods/firepit-commands`: pure-logic tests,
+The mod has `claude plugin test mods/firepit`: pure-logic tests,
 plus UI and delivery tests that mount the bar and the panel on the desktop
 and terminal surfaces against a mocked engine and clock. CI is one job on
 ubuntu-latest.

@@ -10,7 +10,7 @@ The platform behind Claude Code for one person with many projects:
 - **firepitd**, a systemd user service, owns projects, knowledge, inbox,
   artifacts, commands, blueprints, integrity checks and scheduled jobs.
 - **firepit-mcp** bridges every Claude Code session to it over MCP.
-- **The `firepit-commands` mod** puts the project's commands, inbox and
+- **The `firepit` plugin** (a Claude Code mod plus skills) puts the project's commands, inbox and
   artifacts into the Claude Code window.
 
 Linux-first (CachyOS, KDE Plasma 6, Wayland). The old Windows shell (WPF,
@@ -78,8 +78,8 @@ The mod has no Node toolchain. Use the Claude Code CLI bundled with the
 desktop app (`~/.config/Claude/claude-code/<version>/claude`):
 
 ```bash
-claude plugin validate mods/firepit-commands
-claude plugin test mods/firepit-commands
+claude plugin validate mods/firepit
+claude plugin test mods/firepit
 ```
 
 Run Firepit as it runs for real. `scripts/install-linux.sh` publishes the
@@ -119,9 +119,11 @@ Things that bit before:
 - Prefer editing an existing file to creating one. Match the comment
   density and the naming of the code around you.
 - Agent-facing text (server instructions, tool descriptions, blueprint
-  sections) is product surface. It is read by every session, so keep it
-  short, keep it true, and keep tool names spelled exactly
-  (`FirepitServerInstructionsTests` checks).
+  sections, the plugin's skills in `mods/firepit/skills/`) is product
+  surface. It is read by every session, so keep it short, keep it true, and
+  keep tool names spelled exactly (`FirepitServerInstructionsTests` and
+  `PluginSkillsTests` check). A tool that changes behaviour changes the skill
+  that teaches it in the same commit.
 
 ## Testing
 

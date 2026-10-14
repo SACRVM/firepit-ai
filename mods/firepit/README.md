@@ -1,8 +1,9 @@
-# firepit-commands
+# firepit
 
 Firepit inside Claude Code: the project commands from `.firepit/config.json`
 as a button bar above the prompt, the project's inbox and pinned artifacts,
-one panel for all three, and `/fire`.
+one panel for all three, `/fire`, and the skills that say how Firepit
+projects are run.
 
 ```
 Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
@@ -49,6 +50,21 @@ commands run only after their exact command lines were trusted; a change to
 any of them asks again. The patterns are in
 `../../../firepit-template/.firepit/config.json`.
 
+## Skills
+
+Procedures an agent loads when the work calls for them, so every project is
+run the same way. They name only tools that exist; a test in
+`tests/Firepit.Core.Tests/Mcp/PluginSkillsTests.cs` checks.
+
+| Skill | For |
+|---|---|
+| `firepit:setup` | Setting a project up for Firepit or bringing an old one up to date: blueprint, `.mcp.json`, `CLAUDE.md`, `.gitignore`, knowledge placement, Windows leftovers |
+| `firepit:commands` | Writing project commands: groups and names, descriptions, inline output, dev servers, confirmations, trust, the Linux patterns |
+| `firepit:messages` | Messages between projects: when to send, subject and body, release notices, handling and completing, never forwarding |
+| `firepit:knowledge` | The knowledge base: search first, what to save, project or global, pinning, correcting, public repositories |
+
+Firepit's server instructions point every session at them.
+
 ## Install
 
 The repository is a plugin marketplace whose entry points at this folder, so
@@ -59,17 +75,22 @@ claude plugin marketplace add ~/Projects/repos/firepit-ai
 ```
 
 ```bash
-claude plugin install firepit-commands@firepit --scope user
+claude plugin install firepit@firepit --scope user
 ```
+
+Until 0.6.0 the plugin was called `firepit-commands`; uninstall that one
+(`claude plugin uninstall firepit-commands@firepit`). Its store does not carry
+over, so each project's shell commands ask for trust once more and the inbox
+mode starts at *tell*.
 
 After editing, `/reload-plugins` in a session picks the change up.
 
 ## Develop
 
 ```bash
-claude plugin validate mods/firepit-commands
+claude plugin validate mods/firepit
 ```
 
 ```bash
-claude plugin test mods/firepit-commands
+claude plugin test mods/firepit
 ```

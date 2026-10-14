@@ -16,7 +16,7 @@ builds and tests; nothing is uploaded.
 The service and the bridge share one version: `<Version>` in
 `src/Firepit.Daemon/Firepit.Daemon.csproj` and in
 `tools/firepit-mcp/Firepit.Mcp.Bridge.csproj`. The commands mod
-(`mods/firepit-commands`) has its own version in `plugin.json` and `VERSION`
+(`mods/firepit`) has its own version in `plugin.json` and `VERSION`
 in `hooks/register.tsx`; it changes when the mod changes, not here.
 
 ## Argument

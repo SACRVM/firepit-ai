@@ -113,7 +113,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     world(on, ran, submitted)
     await $.command.run({ command: 'fire', args: 'reload' })
 
-    const ui = await $.ui.mount({ plugin: 'firepit-commands', surface, ...BAND })
+    const ui = await $.ui.mount({ plugin: 'firepit', surface, ...BAND })
     expect(await ui.find({ key: 'review' })).toBeDefined()
     expect(await ui.find({ key: 'cmd-site' })).toBeDefined()
 
@@ -142,7 +142,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(start).toContain('--unit=firepit-firepit-template-site')
 
     // The panel lists the same groups as the bar, with every command.
-    const pane = await $.ui.mount({ plugin: 'firepit-commands', surface, component: 'Pane', requestId: 'firepit-commands', props: PANE_PROPS })
+    const pane = await $.ui.mount({ plugin: 'firepit', surface, component: 'Pane', requestId: 'firepit', props: PANE_PROPS })
     expect(await pane.find({ type: 'Text', text: 'Run' })).toBeDefined()
     expect(await pane.find({ type: 'Text', text: 'Other' })).toBeDefined()
     expect(await pane.find({ key: 'run-site' })).toBeDefined()
@@ -166,7 +166,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on)
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit-commands 0.5.0')
+  expect(before.text).toContain('firepit 0.6.0')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')
@@ -198,10 +198,10 @@ for (const surface of ['desktop', 'terminal'] as const) {
     w.files.set(`${ROOT}/docs/report.md`, '# Report\n\nAll good.')
     await $.session.start({ cwd: ROOT, surface, isInteractive: true })
 
-    const band = await $.ui.mount({ plugin: 'firepit-commands', surface, ...BAND })
+    const band = await $.ui.mount({ plugin: 'firepit', surface, ...BAND })
     expect(await band.find({ key: 'inbox' })).toBeDefined()
 
-    const pane = await $.ui.mount({ plugin: 'firepit-commands', surface, component: 'Pane', requestId: 'firepit-commands', props: PANE_PROPS })
+    const pane = await $.ui.mount({ plugin: 'firepit', surface, component: 'Pane', requestId: 'firepit', props: PANE_PROPS })
     const k = hashKey(OLD_MESSAGE)
     expect(await pane.find({ key: `msg-open-${k}` })).toBeDefined()
     expect(await pane.find({ type: 'Text', text: '1 pending' })).toBeDefined()
@@ -213,7 +213,7 @@ for (const surface of ['desktop', 'terminal'] as const) {
 
     // A message opens in the viewer, with its body.
     await pane.press({ key: `msg-open-${k}` })
-    const viewer = await $.ui.mount({ plugin: 'firepit-commands', surface, component: 'Pane', requestId: 'firepit-viewer', props: { ...PANE_PROPS, title: 'Old news' } })
+    const viewer = await $.ui.mount({ plugin: 'firepit', surface, component: 'Pane', requestId: 'firepit-viewer', props: { ...PANE_PROPS, title: 'Old news' } })
     expect(await viewer.find({ type: 'Markdown', text: /re-vendor/ })).toBeDefined()
 
     // Hand to Claude goes in as the person's own request.
@@ -276,7 +276,7 @@ test('with the inbox off, or a prompt being typed, nothing is handed over', asyn
   await clock.advance(10000)
   expect(w.submitted).toEqual([])
 
-  const pane = await $.ui.mount({ plugin: 'firepit-commands', surface: 'desktop', component: 'Pane', requestId: 'firepit-commands', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'firepit', surface: 'desktop', component: 'Pane', requestId: 'firepit', props: PANE_PROPS })
   await pane.press({ key: 'mode-off' })
   w.draft = ''
   await clock.advance(10000)

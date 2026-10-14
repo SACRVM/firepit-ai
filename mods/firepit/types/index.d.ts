@@ -79,7 +79,7 @@ export type Viewing =
 
 declare module 'claude-code' {
   interface PluginState {
-    'firepit-commands': {
+    'firepit': {
       loaded: Loaded | null
       running: string[]
       isTrusted: boolean
