@@ -130,9 +130,10 @@ at once.
 
 - **One per instance.** An exclusive lock on `<runtime>/firepitd.lock` makes
   a second start exit at once.
-- **Lifecycle.** It starts the workspace (project scan, config migration,
-  knowledge service, job scheduler), then the MCP host. SIGTERM and SIGINT
-  stop it cleanly and remove the socket.
+- **Lifecycle.** It starts the workspace (config migration, the central
+  project seeded if the projects root has none, project scan, knowledge
+  service, job scheduler), then the MCP host. SIGTERM and SIGINT stop it
+  cleanly and remove the socket.
 - **Rescan.** Every 30 s it compares the settings file's modification time
   and a fingerprint of the projects root. A fresh clone shows up without a
   restart, and a quiet root costs only a directory listing.

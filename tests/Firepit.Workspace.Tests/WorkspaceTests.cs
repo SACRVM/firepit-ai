@@ -52,12 +52,27 @@ public sealed class WorkspaceTests : IAsyncLifetime
         return dir;
     }
 
+    private async Task<FirepitWorkspace> StartAnotherAsync(string projectsRoot)
+    {
+        var settings = new JsonSettingsStore(Path.Combine(_root, "config-" + Guid.NewGuid().ToString("N"), "settings.json"));
+        settings.Save(FirepitSettings.Defaults with { ProjectsRoot = projectsRoot });
+        var ws = new FirepitWorkspace(
+            new HeadlessTabHost(),
+            settings,
+            new JsonStateStore(Path.Combine(_root, "state", Guid.NewGuid().ToString("N") + ".json")),
+            runJobs: false,
+            knowledgeDataRoot: "");
+        await ws.StartAsync();
+        return ws;
+    }
+
     [Fact]
     public async Task Projects_AreTheQualifiedFolders()
     {
         var projects = await _ws.ListProjectsAsync();
 
-        Assert.Equal(["alpha", "alpha-two", "beta"], projects.Select(p => p.Name).Order());
+        // .firepit is the central project the start seeded.
+        Assert.Equal([".firepit", "alpha", "alpha-two", "beta"], projects.Select(p => p.Name).Order(StringComparer.Ordinal));
         Assert.All(projects, p => Assert.False(p.IsOpen));
     }
 
@@ -245,5 +260,44 @@ public sealed class WorkspaceTests : IAsyncLifetime
         Assert.True(await _ws.RescanIfChangedAsync());
         Assert.Contains("delta", (await _ws.ListProjectsAsync()).Select(p => p.Name));
         Assert.False(await _ws.RescanIfChangedAsync());
+    }
+
+    [Fact]
+    public async Task AFreshRoot_GetsTheCentralProject_WithItsBlueprint()
+    {
+        var central = Path.Combine(_projects, ".firepit");
+
+        Assert.True(File.Exists(Path.Combine(central, "CLAUDE.md")));
+        Assert.True(File.Exists(Path.Combine(central, ".mcp.json")));
+        Assert.True(File.Exists(Path.Combine(central, "projects", "claude.md")));
+        Assert.True(File.Exists(Path.Combine(central, "blueprints", "firepit", "blueprint.json")));
+
+        var blueprints = await _ws.ListBlueprintsAsync();
+        Assert.True(blueprints.Ok, blueprints.Message);
+    }
+
+    [Fact]
+    public async Task AnExistingCentralProject_IsLeftAsItIs()
+    {
+        var root = Path.Combine(_root, "curated");
+        var central = Path.Combine(root, ".firepit");
+        Directory.CreateDirectory(central);
+        File.WriteAllText(Path.Combine(central, "CLAUDE.md"), "# Mine\n");
+
+        await using var ws = await StartAnotherAsync(root);
+
+        Assert.Equal("# Mine\n", File.ReadAllText(Path.Combine(central, "CLAUDE.md")));
+        Assert.Equal(["CLAUDE.md"], Directory.EnumerateFileSystemEntries(central).Select(Path.GetFileName));
+        Assert.Contains(".firepit", (await ws.ListProjectsAsync()).Select(p => p.Name));
+    }
+
+    [Fact]
+    public async Task AMissingProjectsRoot_IsNotCreated()
+    {
+        var root = Path.Combine(_root, "not-there");
+
+        await using var ws = await StartAnotherAsync(root);
+
+        Assert.False(Directory.Exists(root));
     }
 }

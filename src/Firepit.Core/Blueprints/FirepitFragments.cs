@@ -151,10 +151,11 @@ public static class FirepitFragments
         """
         # Firepit
 
-        This project is hosted in Firepit, a shell that runs one agent session per
-        project. Firepit is a transparent host: it never reads or interprets what
-        the terminal prints. Anything the user should see or keep has to be pinned,
-        sent, or saved on purpose.
+        This project is part of Firepit, the platform behind Claude Code: a local
+        service that gives every session the same knowledge base, inbox, artifact
+        list and project commands. Firepit never reads or interprets the session's
+        output. Anything the user should see or keep has to be pinned, sent, or
+        saved on purpose.
 
         The tools and the habits that go with them arrive with the MCP handshake —
         `firepit_artifact_add`, `firepit_inbox_list`, `firepit_knowledge_search` and

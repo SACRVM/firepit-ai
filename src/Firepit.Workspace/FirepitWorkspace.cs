@@ -2,7 +2,9 @@ using Firepit.Adapters;
 using Firepit.Core;
 using Firepit.Core.Agents;
 using Firepit.Core.Artifacts;
+using Firepit.Core.Blueprints;
 using Firepit.Core.Jobs;
+using Firepit.Core.Platform;
 using Firepit.Core.ProjectConfig;
 using Firepit.Core.Projects;
 using Firepit.Core.Settings;
@@ -98,6 +100,8 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         await Serialized(() =>
         {
             RunProjectConfigMigrationIfNeeded();
+            // Before the scan, so the central project is in the first list.
+            SeedCentralProjectIfMissing();
             ReloadProjectList();
             _projectsFingerprint = ProjectsFingerprint();
             _settingsStamp = _loadedSettingsStamp = SettingsStamp();
@@ -379,6 +383,36 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Project-config migration failed; will retry next start");
+        }
+    }
+
+    /// <summary>
+    /// Seeds the central project when the projects root has none. The WPF
+    /// shell asked on first run; a service has no one to ask, and without the
+    /// central project there is no global knowledge base, no shared fragments
+    /// and no blueprints. Only at start: a central project deleted while the
+    /// service runs stays deleted until the next start. A projects root that
+    /// does not exist is left alone; creating it is the user's call.
+    /// </summary>
+    private void SeedCentralProjectIfMissing()
+    {
+        var root = _settings.ProjectsRoot;
+        var bootstrapper = new MetaProjectBootstrapper();
+        if (!Directory.Exists(root) || bootstrapper.Exists(root))
+        {
+            return;
+        }
+
+        try
+        {
+            var written = bootstrapper.Bootstrap(root);
+            new BlueprintStore(root).EnsureDefaults();
+            Log.Information("Seeded the central project {Path}: {Count} file(s)",
+                MetaProjectPath, written.Count);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not seed the central project under {Root}", root);
         }
     }
 

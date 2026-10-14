@@ -14,8 +14,9 @@ namespace Firepit.Workspace;
 public sealed partial class FirepitWorkspace
 {
     private const string MetaProjectMissingMessage =
-        "The .firepit meta project doesn't exist yet — create it via Firepit " +
-        "(Set up Firepit central project) first; blueprints live inside it.";
+        "The central project (.firepit under the projects root) doesn't exist yet; " +
+        "blueprints live inside it. firepitd seeds it when it starts and the projects " +
+        "root is there: systemctl --user restart firepit.";
 
     /// <summary>
     /// A public repository never keeps its knowledge base inside itself.

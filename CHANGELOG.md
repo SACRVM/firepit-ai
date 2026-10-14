@@ -39,6 +39,15 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Fixed
 
+- **A fresh install gets its central project.** Only the WPF shell's
+  first-run prompt created `<projects root>/.firepit`, so on Linux nothing
+  did, and a new machine had no global knowledge base, shared fragments or
+  blueprints. firepitd now seeds it at start when it is missing and the
+  projects root exists, file by file and never over an existing one. The
+  seeded files describe the platform instead of tabs, quick links and a
+  Fishbowl recipe, and the MCP server goes into `.mcp.json`, which Claude
+  Code reads, instead of `.claude/settings.json`, which it does not. The
+  seeded shared fragment no longer calls Firepit a shell.
 - **Changing one command through the tools no longer strips the others.**
   `firepit_add_command` and `firepit_remove_command` rewrite
   `.firepit/config.json`, and the rewrite dropped `description` and `bar`
