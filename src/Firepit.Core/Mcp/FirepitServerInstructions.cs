@@ -23,19 +23,17 @@ public static class FirepitServerInstructions
     public const string Text =
         """
         Firepit is the user's local platform behind Claude Code: a knowledge base
-        shared by all their projects, an inbox for messages between projects, a list
-        of pinned artifacts, and project commands, shown in the Firepit panel of the
-        Claude Code window. It never sees this conversation. Anything the user should
-        see or keep, you have to pin, send, or save explicitly.
+        shared by all their projects, an inbox for messages between projects, and
+        project commands. It never sees this conversation. Anything the user should
+        see or keep, you have to show, send, or save explicitly.
 
-        Artifacts. When you produce a file the user will want to open — a report,
-        screenshot, diagram, generated image, log excerpt, build output, or an
-        executable for them to run — pin it with firepit_artifact_add as you produce
-        it, not at the end of the session. A path buried in scrollback is a path the
-        user has to hunt for. Pinning only links the file: it stays where it is, and
-        firepit_artifact_remove never deletes it. Call firepit_artifact_list first so
-        you update an existing entry instead of piling up near-duplicates, and unpin
-        what has gone stale.
+        Showing files. When you produce a file the user will want to open — a report,
+        screenshot, diagram, generated image, log excerpt, build output — show it as
+        you produce it instead of leaving its path in scrollback. Where the client can
+        send a file into the conversation or open it beside it (the Claude desktop
+        app can), do that. A report or page meant to be read or shared can be
+        published as a Claude artifact; that uploads it to claude.ai, so never with
+        secrets or private data. Where neither is available, give the full path.
 
         Inbox. Other projects, and the user, send messages here. Read the pending ones
         with firepit_inbox_list, act on them, then close each with

@@ -209,24 +209,6 @@ public sealed class WorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AnArtifact_IsPinned_Listed_AndUnpinned()
-    {
-        var file = Path.Combine(_projects, "alpha", "report.md");
-        await File.WriteAllTextAsync(file, "# Report\n");
-
-        var added = await _ws.AddArtifactAsync("alpha", "report.md", "The report", null);
-        Assert.True(added.Ok, added.Message);
-
-        var artifact = Assert.Single((await _ws.ListArtifactsAsync("alpha")).Artifacts);
-        Assert.Equal(("The report", "markdown", true), (artifact.Label, artifact.Kind, artifact.Exists));
-
-        var removed = await _ws.RemoveArtifactAsync("alpha", null, "The report");
-        Assert.True(removed.Ok, removed.Message);
-        Assert.Empty((await _ws.ListArtifactsAsync("alpha")).Artifacts);
-        Assert.True(File.Exists(file));
-    }
-
-    [Fact]
     public async Task WithoutAShell_TheTabToolsSaySo_AndReloadStillWorks()
     {
         var open = await _ws.OpenTabAsync("alpha", resume: false);

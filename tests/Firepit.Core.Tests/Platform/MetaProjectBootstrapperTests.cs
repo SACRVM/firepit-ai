@@ -119,7 +119,8 @@ public class MetaProjectBootstrapperTests : IDisposable
         Assert.Contains("@projects/claude.md\n", claudeMd, StringComparison.Ordinal);
         Assert.Contains("@knowledge-pinned.md\n", claudeMd, StringComparison.Ordinal);
         Assert.Contains("@.firepit/knowledge-pinned.md\n", claudeMd, StringComparison.Ordinal);
-        Assert.Contains(FirepitBlueprintDefaults.ArtifactsSection, claudeMd, StringComparison.Ordinal);
+        Assert.Contains(FirepitBlueprintDefaults.InboxSection, claudeMd, StringComparison.Ordinal);
+        Assert.DoesNotContain(FirepitBlueprintDefaults.RetiredArtifactsSectionMarker, claudeMd, StringComparison.Ordinal);
         Assert.DoesNotContain("{{", claudeMd, StringComparison.Ordinal);
     }
 

@@ -8,10 +8,10 @@ is, what not to build, and which lines must not be crossed.
 The platform behind Claude Code for one person with many projects:
 
 - **firepitd**, a systemd user service, owns projects, knowledge, inbox,
-  artifacts, commands, blueprints, integrity checks and scheduled jobs.
+  commands, blueprints, integrity checks and scheduled jobs.
 - **firepit-mcp** bridges every Claude Code session to it over MCP.
-- **The `firepit` plugin** (a Claude Code mod plus skills) puts the project's commands, inbox and
-  artifacts into the Claude Code window.
+- **The `firepit` plugin** (a Claude Code mod plus skills) puts the
+  project's commands and inbox into the Claude Code window.
 
 Linux-first (CachyOS, KDE Plasma 6, Wayland). The old Windows shell (WPF,
 WebView2, ConPTY) ended at v0.30.0 and lives on the `windows-legacy` branch;
@@ -34,8 +34,9 @@ Read, in this order:
   hands messages to the open session. Nothing else asks a model.
 - **Cloud, sync, accounts or teams.** One user, one machine, files on disk.
 - **An MCP server catalog.** Claude Code owns which servers a session gets.
-- **A file manager or an editor.** Artifacts are links; files open in their
-  own programs.
+- **A file manager, an editor or a file shelf.** Showing files is Claude
+  Code's job: sessions send them into the conversation or publish Claude
+  artifacts. Firepit's own artifact list was retired for that reason.
 
 If a request reads like one of these, say so before building it.
 
@@ -52,8 +53,8 @@ Breaking one is a regression even when the tests pass.
    `ITabHost`; the daemon passes `HeadlessTabHost`.
 3. **The bridge is a tunnel.** `tools/firepit-mcp` translates frames and
    references no Firepit assembly. The protocol lives in `McpHost`.
-4. **One writer per file.** The workspace writes `.firepit/config.json`,
-   `artifacts.json` and the inbox moves. The mod reads files and writes only
+4. **One writer per file.** The workspace writes `.firepit/config.json` and
+   the inbox moves. The mod reads files and writes only
    through Firepit's MCP tools. A rewrite keeps every field it does not
    understand the meaning of. `description` and `bar` were nearly lost that
    way.
@@ -172,10 +173,6 @@ Before researching something that may already be known, query the knowledge base
 @.firepit/knowledge-pinned.md
 
 The import above auto-loads the knowledge docs marked `pin: true` in their frontmatter — always-on rules that apply every session without a search. Firepit regenerates the file from the pinned docs; don't edit it directly. Pin/unpin via the pinned flag on `firepit_knowledge_add` / `firepit_knowledge_update`, and keep the pinned set small — everything else stays reachable through `firepit_knowledge_search`.
-
-## Firepit artifacts
-
-When you produce a file the user will want to open — a report, screenshot, diagram, generated image, log excerpt, build output, or an executable you built for them to run — pin it with the `firepit_artifact_add` MCP tool so it appears in the Artifacts list of the project's Firepit panel. Do this as you produce it, not at the end of the session; a path buried in scrollback is a path the user has to hunt for. Pinning only links the file — it stays where it is, and `firepit_artifact_remove` never deletes it. Check `firepit_artifact_list` first so you update an existing entry instead of piling up near-duplicates, and unpin what has gone stale.
 
 ## Firepit conventions
 

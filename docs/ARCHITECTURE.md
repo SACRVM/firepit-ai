@@ -17,7 +17,7 @@ the lines that must not be crossed. What Firepit is for is in
         │
         ▼
  firepitd ─── one per user (or per named instance), a systemd user service
-   McpHost ──► FirepitWorkspace ──► projects · knowledge · inbox · artifacts
+   McpHost ──► FirepitWorkspace ──► projects · knowledge · inbox
                                      commands · blueprints · integrity · jobs
                                           │
                                           ▼
@@ -40,7 +40,7 @@ the lines that must not be crossed. What Firepit is for is in
 
 | Project | Depends on | Holds |
 |---|---|---|
-| `Firepit.Core` | — | Settings and paths, project discovery, project config and its mutators, inbox reading, artifact resolution, blueprints and fragments, the job scheduler, secrets, the server instructions |
+| `Firepit.Core` | — | Settings and paths, project discovery, project config and its mutators, inbox reading, blueprints and fragments, the job scheduler, secrets, the server instructions |
 | `Firepit.Knowledge` | Core | Knowledge store and layout, indexer and chunker, hybrid search, embeddings, the pinned digest, integrity |
 | `Firepit.Process` | Core | Process runners: jobs (`claude -p`), the pseudo-terminal channel, the Secret Service lookup |
 | `Firepit.Adapters` | Core | The Claude Code adapter: command lines for jobs and sessions |
@@ -60,8 +60,8 @@ the lines that must not be crossed. What Firepit is for is in
 3. **The bridge is a tunnel.** It translates frames and nothing else; the
    protocol lives in `McpHost`. It references no Firepit assembly, so it
    duplicates the socket-path rule (see §3).
-4. **One writer per file.** `.firepit/config.json`, `artifacts.json` and
-   inbox moves are written by the workspace. The mod writes nothing in a
+4. **One writer per file.** `.firepit/config.json` and inbox moves are
+   written by the workspace. The mod writes nothing in a
    project; it calls the tools.
 5. **Neutral code vocabulary.** `Project`, `InboxMessage`, `JobScheduler`;
    the fire stays in user-facing copy.
@@ -100,7 +100,7 @@ of the WPF shell on the `windows-legacy` branch.
 at once.
 
 - **Instructions.** `initialize` returns `FirepitServerInstructions.Text`, a
-  short brief on the habits the tools exist for: pin artifacts as you go,
+  short brief on the habits the tools exist for: show files instead of leaving paths in scrollback,
   close inbox messages you handled, search before researching. Every
   session reads it, so it has a size budget enforced by a test, and it must
   be English.
@@ -111,7 +111,6 @@ at once.
   - Inbox: `firepit_send_to`, `firepit_inbox_list`, `_complete`.
   - Knowledge: `firepit_knowledge_search`, `_get`, `_add`, `_update`,
     `_delete`.
-  - Artifacts: `firepit_artifact_add`, `_list`, `_remove`.
   - Blueprints: `firepit_blueprint_list`, `_check`, `_apply`.
   - `firepit_integrity_check`.
   - The tab tools (`firepit_open_tab`, `_focus_tab`, `_close_tab`) and the
@@ -139,8 +138,8 @@ at once.
   restart, and a quiet root costs only a directory listing.
 - **Logs.** Serilog writes to `~/.local/share/firepit/logs/firepitd-*.log`
   (14 files, 10 MB each) and to the console, which systemd puts in the
-  journal. Logs name things (projects, tools, message subjects, artifact
-  labels) and outcomes; they never contain message bodies or document text.
+  journal. Logs name things (projects, tools, message subjects) and
+  outcomes; they never contain message bodies or document text.
 - **Start menu.** The default instance keeps a *Projects* submenu in the
   freedesktop menu: one entry per project in
   `~/.local/share/applications/firepit/`, a merged menu in
@@ -209,14 +208,12 @@ the tools drops the file's comments; the scaffold says so.
 - `firepit_inbox_complete` moves a file to `inbox/processed/`. Ids are bare
   file names; anything with a path separator is refused.
 
-**Artifacts.**
-- `.firepit/artifacts.json` holds `{ "version": 1, "artifacts": [ { path,
-  label, note, addedAtUtc } ] }`.
-- Paths are stored relative to the project when they are inside it. Adding
-  the same file again updates its entry instead of adding one.
-- The kind (image, markdown, text, document, executable, archive, other)
-  follows from the extension. A path written on Windows is read with either
-  separator and shows as missing when it cannot exist here.
+**Files to show.** Firepit keeps no list of them. A session shows a file
+the way its client offers: the Claude desktop app sends it into the
+conversation or publishes a page as a Claude artifact. The server
+instructions teach that habit. The artifact list of earlier versions
+(`.firepit/artifacts.json`, three tools, a pane) was retired in 0.7.0 of the
+plugin; blueprint manifest v4 drops its `CLAUDE.md` section.
 
 **Knowledge.**
 - A scope is a project or the global base. Its documents are markdown files
@@ -257,16 +254,15 @@ the tools drops the file's comments; the scaffold says so.
 ## 7. The mod
 
 `mods/firepit` is a Claude Code plugin with one hooks module
-(`hooks/register.tsx`), pure logic beside it (`logic.ts`, `inbox.ts`,
-`artifacts.ts`) and a state contract (`types/index.d.ts`). The repository is
+(`hooks/register.tsx`), pure logic beside it (`logic.ts`, `inbox.ts`)
+and a state contract (`types/index.d.ts`). The repository is
 its own plugin marketplace, so the installed mod is read from the working
 copy.
 
 - **Session start.** The mod registers `/fire` and reads the config, the
-  units, the inbox and the artifacts. Every 2 s it re-reads what changed
-  (the config by modification time, the inbox by a listing signature, the
-  artifacts file by modification time, and whether the artifact files
-  exist every 30 s). Every 3 s it lists the project's systemd units.
+  units and the inbox. Every 2 s it re-reads what changed (the config by
+  modification time, the inbox by a listing signature). Every 3 s it lists
+  the project's systemd units.
 - **State.** Session state is written only when a value changed. Every write
   redraws the bar and the panel, and a click that lands on a drawing just
   replaced is lost.
@@ -288,8 +284,8 @@ copy.
   - What was pending when the session started is never delivered on its
     own. `off` marks arrivals as seen.
   - The mode is stored per project root.
-- **Viewer.** Markdown and text (messages, artifacts) open in a second pane,
-  up to 60 000 characters.
+- **Viewer.** An inbox message opens in a second pane, up to 60 000
+  characters of markdown.
 - **Skills.** `mods/firepit/skills/<name>/SKILL.md`: `setup`, `commands`,
   `messages`, `knowledge`, loaded by an agent when its description matches
   the work. The server instructions name them, so a session knows they
@@ -305,8 +301,7 @@ copy.
 - **Paths are checked.** Projects are addressed by name. Inbox ids must be
   bare file names; knowledge documents are addressed by scope and a path
   inside it; `create_project` and `rename_project` work under the projects
-  root. Artifact links may point anywhere, because they only link: unpinning
-  never deletes a file.
+  root.
 - **Secrets stay references.** `${env:…}` and `${cred:…}` in settings;
   `firepit://settings` masks keys, tokens, secrets and passwords.
 - **Commands wait for trust**, per exact command line. A change asks again.

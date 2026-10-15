@@ -138,3 +138,16 @@ export const MODES: { mode: InboxMode; label: string; explains: string }[] = [
 export function isMode(value: unknown): value is InboxMode {
   return value === 'off' || value === 'tell' || value === 'act'
 }
+
+/** The viewer shows this much; a longer message says it was cut. */
+export const VIEW_LIMIT = 60000
+
+/** Drops the control characters a drawing refuses; newline and tab stay. */
+export function printable(text: string): string {
+  return text.replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+}
+
+export function clip(text: string): { text: string; isCut: boolean } {
+  const clean = printable(text)
+  return clean.length <= VIEW_LIMIT ? { text: clean, isCut: false } : { text: clean.slice(0, VIEW_LIMIT), isCut: true }
+}

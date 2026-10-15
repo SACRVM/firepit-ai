@@ -40,8 +40,6 @@ public interface ITabHost
     /// </summary>
     void ApplyConfig(string projectPath, Core.ProjectConfig.ProjectConfig config);
 
-    /// <summary>The project's artifacts.json changed.</summary>
-    void RefreshArtifacts(string projectPath);
 
     /// <summary>Something the user should see now; a log line elsewhere.</summary>
     void Notify(string message, bool isError);
@@ -75,10 +73,6 @@ public sealed class HeadlessTabHost : ITabHost
             (restart ? " (no session to restart — none is hosted by Firepit)." : ".")));
 
     public void ApplyConfig(string projectPath, Core.ProjectConfig.ProjectConfig config)
-    {
-    }
-
-    public void RefreshArtifacts(string projectPath)
     {
     }
 

@@ -124,20 +124,4 @@ public interface IMcpBackend
     Task<BlueprintApplyResult>        ApplyBlueprintAsync(string projectName, string blueprintName,
                                                           bool fixBlanketIgnores);
 
-    /// <summary>Link a file into the project's artifact pane
-    /// (&lt;projectPath&gt;/.firepit/artifacts.json). Upsert by resolved path:
-    /// re-linking the same file updates its label/note in place. The pane
-    /// refreshes immediately — same rule as the command tools, no watcher
-    /// dependency.</summary>
-    Task<ToolCallResult>              AddArtifactAsync(string projectName, string path,
-                                                       string? label, string? note);
-
-    /// <summary>Drop an artifact link by path or label. The file itself is
-    /// never touched. Idempotent — an unknown target returns Ok with a
-    /// "nothing to remove" note.</summary>
-    Task<ToolCallResult>              RemoveArtifactAsync(string projectName, string? path, string? label);
-
-    /// <summary>List the project's artifact links, including ones whose target
-    /// no longer exists (Exists=false) so they can be cleaned up.</summary>
-    Task<ArtifactListResult>          ListArtifactsAsync(string projectName);
 }

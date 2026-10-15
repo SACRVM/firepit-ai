@@ -15,7 +15,6 @@ public class FirepitServerInstructionsTests
     {
         { nameof(FirepitServerInstructions), FirepitServerInstructions.Text },
         { nameof(FirepitBlueprintDefaults.InboxSection),     FirepitBlueprintDefaults.InboxSection },
-        { nameof(FirepitBlueprintDefaults.ArtifactsSection), FirepitBlueprintDefaults.ArtifactsSection },
         { nameof(FirepitBlueprintDefaults.KnowledgeSection), FirepitBlueprintDefaults.KnowledgeSection },
         { nameof(FirepitBlueprintDefaults.PinnedSection),    FirepitBlueprintDefaults.PinnedSection },
         { nameof(FirepitBlueprintDefaults.KnowledgeReadme),  FirepitBlueprintDefaults.KnowledgeReadme },
@@ -52,9 +51,6 @@ public class FirepitServerInstructionsTests
     // search before researching. A habit with a misspelled tool name teaches
     // nothing, and nothing else in the build would catch the typo.
     [Theory]
-    [InlineData("firepit_artifact_add")]
-    [InlineData("firepit_artifact_list")]
-    [InlineData("firepit_artifact_remove")]
     [InlineData("firepit_inbox_list")]
     [InlineData("firepit_inbox_complete")]
     [InlineData("firepit_knowledge_search")]

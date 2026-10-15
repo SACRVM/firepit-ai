@@ -37,6 +37,16 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Removed
 
+- **Firepit's artifact list is retired.** Claude Code shows files itself: a
+  session sends a file into the conversation or publishes a report as a
+  Claude artifact, and Firepit's server instructions now teach exactly that.
+  Gone with it: `firepit_artifact_add`, `_list` and `_remove`, the
+  *Artifacts* section of the panel and its viewer, `/fire artifacts`, the
+  `CLAUDE.md` section *Firepit artifacts* (blueprint manifest v4 drops it
+  from existing blueprints), `Firepit.Core.Artifacts`, the Markdig
+  dependency it needed, and the viewer fixtures. A pin list is kept in the
+  central project for reference.
+
 - **The Windows shell left `main`**: `src/Firepit` (WPF), `src/Firepit.Web`
   (WebView2 and xterm.js), the Inno installer, `run.ps1`, the icon script and
   `/run`. All of it is on `windows-legacy`.

@@ -19,11 +19,16 @@ public sealed class BlueprintStore
     public const string FilesDirName = "files";
 
     /// <summary>
-    /// Bump whenever a built-in CLAUDE.md section is added, so already-seeded
-    /// meta projects pick it up once via <see cref="EnsureDefaults"/>.
-    /// v2 (0.13.0) added the artifacts section.
+    /// Bump whenever a built-in CLAUDE.md section is added or retired, so
+    /// already-seeded meta projects pick the change up once via
+    /// <see cref="EnsureDefaults"/>. v2 (0.13.0) added the artifacts section;
+    /// v4 retired it again.
     /// </summary>
-    public const int CurrentManifestVersion = 3;
+    public const int CurrentManifestVersion = 4;
+
+    /// <summary>Sections a migration removes from a seeded manifest, by marker.</summary>
+    private static readonly IReadOnlySet<string> RetiredSectionMarkers =
+        new HashSet<string>(StringComparer.Ordinal) { FirepitBlueprintDefaults.RetiredArtifactsSectionMarker };
 
     private readonly string _blueprintsDir;
 
@@ -79,8 +84,8 @@ public sealed class BlueprintStore
     /// <summary>
     /// One-time migration of an already-seeded manifest to
     /// <see cref="CurrentManifestVersion"/>: appends built-in CLAUDE.md
-    /// sections introduced by a newer Firepit, matched by marker so nothing
-    /// the user wrote is touched. Without it a convention added in a later
+    /// sections introduced by a newer Firepit and drops retired ones, matched
+    /// by marker so nothing the user wrote is touched. Without it a convention added in a later
     /// release only ever reaches fresh installs — every existing meta project
     /// stays frozen at the section set it was first seeded with.
     ///
@@ -111,6 +116,7 @@ public sealed class BlueprintStore
         }
 
         var sections = existing.ClaudeMd?.ToList() ?? [];
+        sections.RemoveAll(s => RetiredSectionMarkers.Contains(s.Marker));
         var known = sections.Select(s => s.Marker).ToHashSet(StringComparer.Ordinal);
         foreach (var builtIn in BuiltInClaudeMdSections)
         {
@@ -135,7 +141,6 @@ public sealed class BlueprintStore
         new(FirepitBlueprintDefaults.InboxSectionMarker,     FirepitBlueprintDefaults.InboxSection),
         new(FirepitBlueprintDefaults.KnowledgeSectionMarker, FirepitBlueprintDefaults.KnowledgeSection),
         new(FirepitBlueprintDefaults.PinnedSectionMarker,    FirepitBlueprintDefaults.PinnedSection),
-        new(FirepitBlueprintDefaults.ArtifactsSectionMarker, FirepitBlueprintDefaults.ArtifactsSection),
     ];
 
     private static void SeedFile(string blueprintDir, string relativePath, string content)

@@ -1,9 +1,8 @@
 # firepit
 
 Firepit inside Claude Code: the project commands from `.firepit/config.json`
-as a button bar above the prompt, the project's inbox and pinned artifacts,
-one panel for all three, `/fire`, and the skills that say how Firepit
-projects are run.
+as a button bar above the prompt, the project's inbox, one panel for both,
+`/fire`, and the skills that say how Firepit projects are run.
 
 ```
 Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
@@ -14,8 +13,7 @@ Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
   only.
 - **Panel** (*Firepit*) — the inbox, the command groups with one line per
   command and its `description` (long-running ones show ● running with stop
-  and logs; `details` shows what each command actually runs), and the
-  artifacts.
+  and logs; `details` shows what each command actually runs).
 - **Inbox** — each pending message in `.firepit/inbox/` with sender and age.
   A message opens in the viewer with *Hand to Claude* (sent as your request)
   and *Done* (`firepit_inbox_complete`). *new messages* decides what happens
@@ -25,21 +23,19 @@ Inbox 2   Run: site ticker   Build: app broken   Git: status repo   …   panel
   irreversible, reports back and does not forward it; **off** — it only shows
   up here. What was already waiting when the session started is never handed
   over on its own; *all to Claude* does that on request.
-- **Artifacts** — the links in `.firepit/artifacts.json`, newest first.
-  Markdown and text open in the viewer, everything else with `xdg-open`;
-  *folder* selects the file in the file manager; a link that points nowhere
-  (such as a Windows path) says *missing*. *unpin* is
-  `firepit_artifact_remove`; the file stays.
 - **`/fire`** opens the panel, `/fire git status` runs a command,
   `/fire open vectorizer` switches to another project's session (or starts
   one; `firepit_open_project`),
-  `/fire inbox` and `/fire artifacts` list them in the chat, `/fire trust`
+  `/fire inbox` lists the inbox in the chat, `/fire trust`
   trusts the project's shell commands, `/fire status` says which version is
   loaded and what runs, `/fire reload` rereads everything.
 
-*Done* and *unpin* need Firepit's MCP server (`firepit`, from the project's
-`.mcp.json`) connected in the session; reading the inbox and the artifacts
-does not.
+*Done* and `/fire open` need Firepit's MCP server (`firepit`, from the
+project's `.mcp.json`) connected in the session; reading the inbox does not.
+
+Files a session wants you to see are not Firepit's business any more:
+Claude Code sends them into the conversation or publishes them as Claude
+artifacts. Until 0.7.0 the plugin listed `.firepit/artifacts.json`.
 
 How commands run on Linux: long-running ones as systemd user units
 (`firepit-<project>-<id>`, logs in the panel and the journal), windowed ones

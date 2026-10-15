@@ -6,7 +6,6 @@ import { hashKey } from './logic'
 
 const ROOT = '/r/firepit-template'
 const INBOX = `${ROOT}/.firepit/inbox`
-const ARTIFACTS = `${ROOT}/.firepit/artifacts.json`
 
 const CONFIG = JSON.stringify({
   id: 'firepit-template',
@@ -166,7 +165,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on)
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit 0.6.0')
+  expect(before.text).toContain('firepit 0.7.0')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')
@@ -191,11 +190,9 @@ test('an inline command answers in the chat, and Claude gets the output too', as
 })
 
 for (const surface of ['desktop', 'terminal'] as const) {
-  test(`${surface}: the inbox shows in the bar and the panel; done and unpin go through Firepit`, async ($, on) => {
+  test(`${surface}: the inbox shows in the bar and the panel; done goes through Firepit`, async ($, on) => {
     const w = world(on)
     w.files.set(`${INBOX}/${OLD_MESSAGE}`, messageFile('alpha', 'Old news'))
-    w.files.set(ARTIFACTS, JSON.stringify({ version: 1, artifacts: [{ path: 'docs/report.md', label: 'Report', note: 'The weekly one', addedAtUtc: '2026-10-13T09:00:00Z' }, { path: 'C:\\x\\gone.sql', addedAtUtc: '2026-09-01T00:00:00Z' }] }))
-    w.files.set(`${ROOT}/docs/report.md`, '# Report\n\nAll good.')
     await $.session.start({ cwd: ROOT, surface, isInteractive: true })
 
     const band = await $.ui.mount({ plugin: 'firepit', surface, ...BAND })
@@ -206,10 +203,6 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(await pane.find({ key: `msg-open-${k}` })).toBeDefined()
     expect(await pane.find({ type: 'Text', text: '1 pending' })).toBeDefined()
     expect(await pane.find({ key: 'mode-tell' })).toBeDefined()
-    expect(await pane.find({ key: `art-open-${hashKey('docs/report.md')}` })).toBeDefined()
-    // A Windows link cannot exist here: it says so and offers only unpin.
-    expect(await pane.find({ type: 'Text', text: 'missing' })).toBeDefined()
-    expect(await pane.find({ key: `art-folder-${hashKey('C:\\x\\gone.sql')}` })).toBe(undefined)
 
     // A message opens in the viewer, with its body.
     await pane.press({ key: `msg-open-${k}` })
@@ -226,12 +219,6 @@ for (const surface of ['desktop', 'terminal'] as const) {
     expect(w.tools).toContainEqual({ tool: 'firepit_inbox_complete', args: { id: OLD_MESSAGE } })
     expect(await band.find({ key: 'inbox' })).toBe(undefined)
     expect(await pane.find({ type: 'Text', text: 'empty' })).toBeDefined()
-
-    // A markdown artifact opens in the viewer; unpin is Firepit's tool too.
-    await pane.press({ key: `art-open-${hashKey('docs/report.md')}` })
-    expect(await viewer.find({ type: 'Markdown', text: /All good/ })).toBeDefined()
-    await pane.press({ key: `art-unpin-${hashKey('C:\\x\\gone.sql')}` })
-    expect(w.tools).toContainEqual({ tool: 'firepit_artifact_remove', args: { path: 'C:\\x\\gone.sql' } })
 
     await viewer.unmount()
     await pane.unmount()

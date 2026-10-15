@@ -59,7 +59,7 @@ public sealed class BlueprintStoreTests : IDisposable
         Assert.Equal("firepit", blueprint.Name);
         Assert.True(blueprint.EnsureProjectConfig);
         Assert.Equal(ProjectScaffolding.GitignoreEntries, blueprint.GitignoreLines);
-        Assert.Equal(5, blueprint.ClaudeMdSections.Count);
+        Assert.Equal(4, blueprint.ClaudeMdSections.Count);
         Assert.Equal(2, blueprint.Files.Count);
         var relPaths = blueprint.Files.Select(f => f.RelativePath).ToArray();
         Assert.Contains(".firepit/knowledge/README.md", relPaths);
@@ -101,7 +101,10 @@ public sealed class BlueprintStoreTests : IDisposable
               "version": 1,
               "description": "my edit",
               "ensureProjectConfig": false,
-              "claudeMd": [ { "marker": "firepit_inbox_complete", "content": "my inbox wording\n" } ]
+              "claudeMd": [
+                { "marker": "firepit_inbox_complete", "content": "my inbox wording\n" },
+                { "marker": "firepit_artifact_add", "content": "## Firepit artifacts\n" }
+              ]
             }
             """);
 
@@ -119,7 +122,11 @@ public sealed class BlueprintStoreTests : IDisposable
         // a new convention has to reach meta projects that already exist.
         Assert.Contains(
             blueprint.ClaudeMdSections,
-            s => s.Marker == FirepitBlueprintDefaults.ArtifactsSectionMarker);
+            s => s.Marker == FirepitBlueprintDefaults.KnowledgeSectionMarker);
+        // And a retired one leaves: Claude Code shows files itself now.
+        Assert.DoesNotContain(
+            blueprint.ClaudeMdSections,
+            s => s.Marker == FirepitBlueprintDefaults.RetiredArtifactsSectionMarker);
 
         // Migration runs exactly once.
         Assert.False(store.EnsureDefaults());

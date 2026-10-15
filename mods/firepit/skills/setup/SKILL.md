@@ -32,9 +32,9 @@ than recreating by hand what it does; then do the parts it cannot.
 `firepit_blueprint_apply` with `projectName` and `blueprint: "firepit"`. It
 creates what is missing and never touches what exists:
 
-- the `CLAUDE.md` sections for the inbox, knowledge, pinned knowledge,
-  artifacts and the shared conventions, the last importing the fragments that
-  match the repository's visibility. Sections are found by a marker, so text
+- the `CLAUDE.md` sections for the inbox, knowledge, pinned knowledge and
+  the shared conventions, the last importing the fragments that match the
+  repository's visibility. Sections are found by a marker, so text
   around them stays as it is;
 - `.firepit/config.json`, from the commented scaffold, if there is none;
 - the `.gitignore` block: `.firepit/inbox/`, `.firepit/runs/`,
@@ -67,8 +67,9 @@ with `fixBlanketIgnores: true`. That edits their `.gitignore`.
 - **Commands** written for Windows (`powershell`, `pwsh`, `cmd`, `.exe`,
   drive letters, backslashes, `elevated`) need a Linux form or have to go. The
   `firepit:commands` skill has the patterns.
-- **Artifacts** with absolute Windows paths: `firepit_artifact_list` shows them
-  with `exists: false`; unpin each with `firepit_artifact_remove`.
+- **`.firepit/artifacts.json`** and a `CLAUDE.md` section *Firepit artifacts*
+  are leftovers of a retired feature: Claude Code shows files itself now.
+  Delete both (`git rm` where the file was committed).
 - **Leftovers**: `bash.exe.stackdump` files are Git Bash crash dumps. Delete
   them, with `git rm` where they were committed.
 - **Line endings**: a shell script with CRLF fails with

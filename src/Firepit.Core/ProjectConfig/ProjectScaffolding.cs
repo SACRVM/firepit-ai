@@ -101,10 +101,6 @@ public static class ProjectScaffolding
             projectPath,
             Blueprints.FirepitBlueprintDefaults.PinnedSectionMarker,
             Blueprints.FirepitBlueprintDefaults.PinnedSection);
-        claudeSeeded |= EnsureClaudeMdSection(
-            projectPath,
-            Blueprints.FirepitBlueprintDefaults.ArtifactsSectionMarker,
-            Blueprints.FirepitBlueprintDefaults.ArtifactsSection);
         if (metaProjectPath is not null)
         {
             Blueprints.FirepitFragments.EnsureSeeded(metaProjectPath);

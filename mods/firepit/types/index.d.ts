@@ -57,25 +57,8 @@ export type InboxMessage = {
  */
 export type InboxMode = 'off' | 'tell' | 'act'
 
-export type ArtifactKind = 'image' | 'markdown' | 'text' | 'document' | 'executable' | 'archive' | 'other'
-
-/** One link from `.firepit/artifacts.json`. */
-export type Artifact = {
-  /** As stored: relative to the project root, or absolute. */
-  path: string
-  /** Where it is on this machine; a Windows path stays as it was. */
-  absolute: string
-  label: string
-  note: string | null
-  kind: ArtifactKind
-  addedAt: string | null
-  exists: boolean
-}
-
-/** What the viewer pane shows. */
-export type Viewing =
-  | { kind: 'message'; message: InboxMessage; body: string }
-  | { kind: 'artifact'; artifact: Artifact; text: string; isCut: boolean }
+/** What the viewer pane shows: one inbox message and its body. */
+export type Viewing = { message: InboxMessage; body: string }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -91,8 +74,6 @@ declare module 'claude-code' {
       inbox: InboxMessage[]
       inboxMode: InboxMode
       showAllMessages: boolean
-      artifacts: Artifact[]
-      showAllArtifacts: boolean
       viewing: Viewing | null
     }
   }

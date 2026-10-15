@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { InboxMessage } from '../types'
-import { ago, deliveryPrompt, handOverPrompt, parseMessage, sweep } from './inbox'
+import { ago, clip, deliveryPrompt, handOverPrompt, parseMessage, sweep, VIEW_LIMIT } from './inbox'
 
 const FILE = [
   '---',
@@ -99,4 +99,11 @@ describe('prompts', () => {
     expect(handOverPrompt(message('m.md', 'Hi'))).toContain('"Hi" from a (id m.md)')
     expect(handOverPrompt(null)).toContain('Work through the Firepit inbox')
   })
+})
+
+test('clip keeps newlines and tabs, drops other control characters, cuts long text', () => {
+  expect(clip('a\r\nb\tc\u001b[0m')).toEqual({ text: 'a\nb\tc[0m', isCut: false })
+  const long = clip('x'.repeat(VIEW_LIMIT + 5))
+  expect(long.isCut).toBe(true)
+  expect(long.text.length).toBe(VIEW_LIMIT)
 })

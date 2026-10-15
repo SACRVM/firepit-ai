@@ -13,11 +13,11 @@ Firepit is a local platform for one person who runs Claude Code across many
 projects. It has three parts:
 
 - **firepitd**, a user service, owns the projects, the knowledge base, the
-  inbox, the artifact links, scheduled jobs and blueprints.
+  inbox, scheduled jobs and blueprints.
 - **firepit-mcp**, a bridge, gives every Claude Code session those as MCP
   tools.
 - **firepit**, a Claude Code plugin, puts the project's commands, inbox
-  and artifacts into the Claude Code window.
+  into the Claude Code window, with skills for how projects are run.
 
 Claude Code is the interface. Firepit has no window of its own.
 
@@ -47,8 +47,8 @@ today and next month. Firepit is the between.
 - **A post office.** Projects send each other messages that wait in the
   recipient's inbox until a session handles them. A session that is open and
   idle can be told the moment one arrives.
-- **A shelf.** Files a session wants you to see get pinned and stay one
-  click away.
+- **A door.** Every project sits in the start menu and in KRunner; one
+  click opens its Claude session.
 - **A switchboard.** Each project's commands are buttons and `/fire` phrases,
   run the Linux way: systemd units, Konsole, or output in the chat.
 - **A clock.** Scheduled `claude -p` jobs per project.
@@ -67,8 +67,10 @@ today and next month. Firepit is the between.
   already open; nothing else asks a model anything.
 - **Not a cloud service, a team tool or an orchestrator.** One user, one
   machine, files on disk. Nothing is synced except what git syncs.
-- **Not an IDE or a file manager.** Artifacts are links; the files stay
-  where they are and open in their own programs.
+- **Not an IDE, a file manager or a file shelf.** Showing a file is Claude
+  Code's job (a file sent into the conversation, a Claude artifact); Firepit
+  keeps no list of them. Files stay where they are and open in their own
+  programs.
 - **Not the MCP configuration.** Claude Code owns which servers a session
   gets (`.mcp.json`, user settings). Firepit is one of those servers. The old
   shell's registry projected a server catalog into the sessions it launched;
@@ -77,7 +79,7 @@ today and next month. Firepit is the between.
 ## Principles
 
 1. **Files you own.** Everything a project carries — config, knowledge,
-   inbox, artifact links — is plain JSON or markdown in its `.firepit/`
+   inbox — is plain JSON or markdown in its `.firepit/`
    folder, readable without Firepit and committed or ignored as the
    repository decides. Derived data (search indexes, run history) is never
    the only copy of anything.
@@ -104,7 +106,6 @@ today and next month. Firepit is the between.
 | Projects | Discovery under one root (`CLAUDE.md` or `.claude/` qualifies), manual entries, the central project (`<root>/.firepit`), create, rename with history migration |
 | Knowledge | Project and global scopes; add, update, delete, get, hybrid search (full-text + local vectors, full-text alone when vectors are unavailable); pinning; pointer files that keep a public repository's notes in the central project |
 | Inbox | Send to a project, list, complete; the mod's badge, viewer and delivery modes (off, tell, act) |
-| Artifacts | Pin, list with kind and existence, unpin; the mod's list and markdown/text viewer |
 | Commands | `.firepit/config.json` commands: shell (new window, inline, reusable or long-running), Claude prompt, URL; groups, descriptions, bar flag, confirm, trust |
 | Jobs | Cron schedules per project, timezone, concurrency policy, tool, turn and budget limits, run history |
 | Blueprints | List, check, apply; shared `CLAUDE.md` fragments chosen by repository visibility |

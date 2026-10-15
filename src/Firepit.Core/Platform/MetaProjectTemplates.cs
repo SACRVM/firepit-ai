@@ -20,7 +20,6 @@ internal static class MetaProjectTemplates
         FirepitBlueprintDefaults.InboxSection + "\n" +
         KnowledgeSection + "\n" +
         PinnedSection + "\n" +
-        FirepitBlueprintDefaults.ArtifactsSection + "\n" +
         FirepitFragments.ResolveSection(
             FirepitBlueprintDefaults.FragmentsSection, metaProjectPath, metaProjectPath);
 
@@ -44,7 +43,7 @@ internal static class MetaProjectTemplates
         | `projects/claude-github-public.md`, `projects/claude-github-private.md` | Policy that depends on a repository's GitHub visibility |
         | `projects/<name>/` | What this repository keeps about another project, such as the knowledge of a public repository |
         | `blueprints/<name>/` | What a project carries: `CLAUDE.md` sections, seeded files, ignore rules |
-        | `.firepit/` | This project's own config, inbox, artifacts and knowledge |
+        | `.firepit/` | This project's own config, inbox and knowledge |
 
         ## Working here
 
@@ -117,7 +116,7 @@ internal static class MetaProjectTemplates
         | `projects/claude*.md` | The shared `CLAUDE.md` fragments | yes |
         | `projects/<name>/` | Notes and knowledge about another project | yes |
         | `blueprints/` | The blueprints | yes |
-        | `.firepit/` | This project's own config, knowledge, inbox and artifacts | as in any project |
+        | `.firepit/` | This project's own config, knowledge and inbox | as in any project |
 
         Firepit itself: https://github.com/SACRVM/firepit-ai
 

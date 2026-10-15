@@ -1,7 +1,6 @@
 using Firepit.Adapters;
 using Firepit.Core;
 using Firepit.Core.Agents;
-using Firepit.Core.Artifacts;
 using Firepit.Core.Blueprints;
 using Firepit.Core.Desktop;
 using Firepit.Core.Jobs;
@@ -42,7 +41,6 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
     private readonly ISettingsStore _settingsStore;
     private readonly IStateStore _stateStore;
     private readonly IProjectConfigStore _projectConfigStore;
-    private readonly IArtifactStore _artifactStore;
     private readonly IReadOnlyList<IAgentAdapter> _adapters;
     private readonly IProjectOpener _projectOpener;
     private readonly bool _runJobs;
@@ -67,7 +65,6 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         ISettingsStore? settingsStore = null,
         IStateStore? stateStore = null,
         IProjectConfigStore? projectConfigStore = null,
-        IArtifactStore? artifactStore = null,
         bool runJobs = true,
         string? knowledgeDataRoot = null,
         IProjectOpener? projectOpener = null)
@@ -76,7 +73,6 @@ public sealed partial class FirepitWorkspace : IMcpBackend, IAsyncDisposable
         _settingsStore = settingsStore ?? new JsonSettingsStore();
         _stateStore = stateStore ?? new JsonStateStore();
         _projectConfigStore = projectConfigStore ?? new JsonProjectConfigStore();
-        _artifactStore = artifactStore ?? new JsonArtifactStore();
         _adapters = [new ClaudeCodeAdapter()];
         _runJobs = runJobs;
         _knowledgeDataRoot = knowledgeDataRoot;

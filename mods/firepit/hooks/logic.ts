@@ -285,7 +285,7 @@ export function findCommands(commands: Cmd[], query: string): Cmd[] {
   return commands.filter(c => phraseOf(c).toLowerCase().startsWith(q) || c.name.toLowerCase().startsWith(q))
 }
 
-/** A short, stable element key for a long name: an inbox file, an artifact path. */
+/** A short, stable element key for a long name, such as an inbox file. */
 export function hashKey(text: string): string {
   let h = 5381
   for (let i = 0; i < text.length; i += 1) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0
