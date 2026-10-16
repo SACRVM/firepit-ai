@@ -171,3 +171,16 @@ describe('naming and layout', () => {
     ])
   })
 })
+
+test('a type reads in any spelling the Windows shell or the docs used', () => {
+  const { commands, problems } = readCommands({
+    commands: [
+      { name: 'a', type: 'Shell', command: 'true' },
+      { name: 'b', type: 'ClaudePrompt', prompt: 'Hi.' },
+      { name: 'c', type: 'URL', url: 'https://example.com' },
+      { name: 'd', type: 'teleport' },
+    ],
+  })
+  expect(commands.map(c => c.type)).toEqual(['shell', 'claude-prompt', 'url'])
+  expect(problems.length).toBe(1)
+})

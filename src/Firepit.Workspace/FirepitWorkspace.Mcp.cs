@@ -431,8 +431,9 @@ public sealed partial class FirepitWorkspace
                         isError: true);
                 }
             }
-            var existing = SafeLoadProjectConfig(project.Path)
-                           ?? new Firepit.Core.ProjectConfig.ProjectConfig();
+            var read = _projectConfigStore.Read(project.Path);
+            if (read.IsUnreadable) return Unreadable(project, read);
+            var existing = read.Config ?? new Firepit.Core.ProjectConfig.ProjectConfig();
 
             var newCommand = new ProjectCommand(
                 Name:        spec.Name,
@@ -483,8 +484,12 @@ public sealed partial class FirepitWorkspace
                 return new CommandListResult(
                     projectName, Array.Empty<CommandSummary>(), UnknownProject(projectName));
 
-            var config   = SafeLoadProjectConfig(project.Path);
-            var commands = config?.Commands ?? Array.Empty<ProjectCommand>();
+            var read = _projectConfigStore.Read(project.Path);
+            if (read.IsUnreadable)
+            {
+                return new CommandListResult(project.Name, Array.Empty<CommandSummary>(), Unreadable(project, read).Message);
+            }
+            var commands = read.Config?.Commands ?? Array.Empty<ProjectCommand>();
             var summaries = commands.Select(ToSummary).ToArray();
             return new CommandListResult(project.Name, summaries);
         });
@@ -498,7 +503,9 @@ public sealed partial class FirepitWorkspace
             if (string.IsNullOrWhiteSpace(commandName))
                 return new ToolCallResult(false, "command 'name' is required and cannot be empty");
 
-            var existing = SafeLoadProjectConfig(project.Path);
+            var read = _projectConfigStore.Read(project.Path);
+            if (read.IsUnreadable) return Unreadable(project, read);
+            var existing = read.Config;
             if (existing is null || existing.Commands is null || existing.Commands.Count == 0)
             {
                 return new ToolCallResult(true, $"No command '{commandName}' to remove in {project.Name} (nothing configured)");
@@ -622,6 +629,16 @@ public sealed partial class FirepitWorkspace
             SafeLoadProjectConfig(p.Path)?.Id is { Length: > 0 } id
             && string.Equals(id, name, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// A config file that is there but does not read. Writing now would put
+    /// what little was read over the user's file, which is how voxcade lost its
+    /// ten commands, so the command tools stop and say why.
+    /// </summary>
+    private static ToolCallResult Unreadable(Firepit.Core.Projects.Project project, ProjectConfigRead read) =>
+        new(false,
+            $"{project.Name}/.firepit/config.json could not be read ({read.Error ?? "no config object"}); nothing was changed. " +
+            "Fix the file by hand, then try again.");
 
     private static string UnknownProject(string name) =>
         $"Unknown project: '{name}'. Pass a name from firepit_list_projects, "

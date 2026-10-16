@@ -53,6 +53,25 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Fixed
 
+- **`firepit_add_command` no longer wipes a config it cannot read.** A
+  command of type `claude-prompt` made the whole `.firepit/config.json`
+  unreadable to Firepit (the enum knew only `ClaudePrompt`), so
+  `firepit_list_commands` came back empty and `firepit_add_command` wrote
+  its one new command over the user's file, id and comments gone. 19
+  projects had such a config; voxcade lost ten commands. Types now read in
+  any spelling (`shell`, `Shell`, `claude-prompt`, `ClaudePrompt`, `url`) and
+  are written as the docs spell them; a config that does not read is never
+  written over: the command tools stop and say why, and the settings
+  migration leaves it alone. Saved configs end with a newline.
+- **The plugin reads command types in any spelling** (0.7.1). Configs
+  written by the Windows shell say `"Shell"`, and the bar skipped those
+  commands.
+- **The integrity check counts only real imports.** It treated a fragment's
+  file name anywhere in `CLAUDE.md` as an import, so the central project's
+  layout table made a private repository look like it imported the public
+  policy (and a public one that merely named the private file would have
+  got an error).
+
 - **A fresh install gets its central project.** Only the WPF shell's
   first-run prompt created `<projects root>/.firepit`, so on Linux nothing
   did, and a new machine had no global knowledge base, shared fragments or

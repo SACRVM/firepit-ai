@@ -23,7 +23,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.7.0'
+const VERSION = '0.7.1'
 const PANE = 'firepit'
 const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'

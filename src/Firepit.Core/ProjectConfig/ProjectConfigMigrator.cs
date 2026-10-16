@@ -53,8 +53,9 @@ public sealed class ProjectConfigMigrator
             // Don't clobber an existing per-project file — assume the user
             // (or a prior run) already curated it. Migration just strips the
             // duplicated fields from settings.json in that case.
-            var existing = _projectStore.Load(project.Path);
-            if (existing is null)
+            // Exists, not Load: a file that is there but does not read is the
+            // user's too, and writing would replace it with settings leftovers.
+            if (!_projectStore.Read(project.Path).Exists)
             {
                 _projectStore.Save(project.Path, BuildConfigFromSettings(project));
             }

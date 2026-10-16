@@ -8,30 +8,33 @@ public sealed class JsonProjectConfigStore : IProjectConfigStore
     public const string DirectoryName = ".firepit";
     public const string FileName      = "config.json";
 
-    public ProjectConfig? Load(string projectPath)
+    public ProjectConfig? Load(string projectPath) => Read(projectPath).Config;
+
+    public ProjectConfigRead Read(string projectPath)
     {
         ArgumentNullException.ThrowIfNull(projectPath);
 
         var path = ResolvePath(projectPath);
         if (!File.Exists(path))
         {
-            return null;
+            return new ProjectConfigRead(null, Exists: false);
         }
 
         try
         {
             using var stream = File.OpenRead(path);
-            return JsonSerializer.Deserialize(stream, ProjectConfigJsonContext.Default.ProjectConfig);
+            var config = JsonSerializer.Deserialize(stream, ProjectConfigJsonContext.Default.ProjectConfig);
+            return new ProjectConfigRead(config, Exists: true, config is null ? "the file holds no config object" : null);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            // Malformed file — surface as "no config" rather than crashing the
-            // session. Phase 2's watcher will log + skip on hot-reload failures.
-            return null;
+            // Malformed: readers treat it as "no config"; writers must not
+            // write over it (ProjectConfigRead.IsUnreadable).
+            return new ProjectConfigRead(null, Exists: true, ex.Message);
         }
-        catch (IOException)
+        catch (IOException ex)
         {
-            return null;
+            return new ProjectConfigRead(null, Exists: true, ex.Message);
         }
     }
 
@@ -42,8 +45,9 @@ public sealed class JsonProjectConfigStore : IProjectConfigStore
 
         var path = ResolvePath(projectPath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var stream = File.Create(path);
-        JsonSerializer.Serialize(stream, config, ProjectConfigJsonContext.Default.ProjectConfig);
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(config, ProjectConfigJsonContext.Default.ProjectConfig) + "\n");
+        File.Move(temp, path, overwrite: true);
     }
 
     public static string ResolvePath(string projectPath) =>

@@ -174,6 +174,53 @@ public sealed class WorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AConfigThatDoesNotRead_IsNeverWrittenOver()
+    {
+        // voxcade lost ten commands this way: the read failed, the tool wrote
+        // an empty config with the new command over the user's file.
+        var config = Path.Combine(_projects, "alpha", ".firepit", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        const string broken = """{ "version": 1, "id": "alpha", "commands": [ { "name": "x", "type": "teleport" } ] }""";
+        await File.WriteAllTextAsync(config, broken);
+
+        var added = await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(Name: "status", Type: "shell", Command: "git"));
+        var removed = await _ws.RemoveProjectCommandAsync("alpha", "x");
+        var listed = await _ws.ListProjectCommandsAsync("alpha");
+
+        Assert.False(added.Ok);
+        Assert.Contains("could not be read", added.Message);
+        Assert.False(removed.Ok);
+        Assert.Contains("could not be read", listed.Error);
+        Assert.Equal(broken, await File.ReadAllTextAsync(config));
+    }
+
+    [Fact]
+    public async Task AddingToACommentedConfig_KeepsItsCommandsAndId()
+    {
+        var config = Path.Combine(_projects, "alpha", ".firepit", "config.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(config)!);
+        await File.WriteAllTextAsync(config, """
+            {
+              // A header comment.
+              "version": 1,
+              "id": "alpha",
+              "commands": [
+                { "group": "Claude", "name": "review", "type": "claude-prompt", "prompt": "Review it." },
+              ],
+            }
+            """);
+
+        var added = await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(Name: "status", Type: "shell", Command: "git", Group: "Git"));
+
+        Assert.True(added.Ok, added.Message);
+        var text = await File.ReadAllTextAsync(config);
+        Assert.Contains("\"id\": \"alpha\"", text);
+        Assert.Contains("\"type\": \"claude-prompt\"", text);
+        Assert.Contains("\"type\": \"shell\"", text);
+        Assert.Equal(["review", "status"], (await _ws.ListProjectCommandsAsync("alpha")).Commands.Select(c => c.Name));
+    }
+
+    [Fact]
     public async Task ANameTwoGroupsShare_IsRemovedOnlyWithItsGroup()
     {
         await _ws.AddProjectCommandAsync("alpha", new AddCommandSpec(Name: "debug", Type: "shell", Command: "a", Group: "Build"));

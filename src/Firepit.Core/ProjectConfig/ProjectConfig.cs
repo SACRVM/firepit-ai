@@ -91,6 +91,7 @@ public sealed record ProjectCommand(
     // always lists it. Null means true.
     bool? Bar = null);
 
+[JsonConverter(typeof(ProjectCommandTypeConverter))]
 public enum ProjectCommandType
 {
     Shell,

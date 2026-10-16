@@ -101,4 +101,17 @@ public sealed class FragmentIntegrityTests : IDisposable
         Assert.True(GitHubVisibility.Inspect(_project).Certain);
         Assert.Equal(RepoVisibility.None, GitHubVisibility.Inspect(_project).Value);
     }
+
+    [Fact]
+    public void AFragmentNamedInProse_IsNotAnImport()
+    {
+        // The central project's CLAUDE.md names both class fragments in its
+        // layout table. Only an @-import line counts as importing one.
+        WriteClaudeMd(
+            "| `projects/claude-github-public.md`, `projects/claude-github-private.md` | Policy by visibility |\n\n" +
+            $"{FirepitFragments.SectionMarker}\n" +
+            $"@../.firepit/{FirepitFragments.DirName}/{FirepitFragments.SharedFileName}\n");
+
+        Assert.DoesNotContain(Check(), f => f.Message.Contains("policy fragment", StringComparison.Ordinal));
+    }
 }

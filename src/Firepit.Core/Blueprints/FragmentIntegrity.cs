@@ -70,8 +70,13 @@ public static class FragmentIntegrity
         var inspection = GitHubVisibility.Inspect(projectPath);
         var visibility = inspection.Value;
 
-        var importsPublic = claudeMd.Contains(FirepitFragments.PublicFileName, StringComparison.OrdinalIgnoreCase);
-        var importsPrivate = claudeMd.Contains(FirepitFragments.PrivateFileName, StringComparison.OrdinalIgnoreCase);
+        // Only @-import lines count. A CLAUDE.md that names a fragment in prose
+        // (the central project's layout table names both) imports nothing.
+        var imported = ImportsIn(claudeMd)
+            .Select(i => i.Replace('\\', '/').Split('/')[^1])
+            .ToList();
+        var importsPublic = imported.Contains(FirepitFragments.PublicFileName, StringComparer.OrdinalIgnoreCase);
+        var importsPrivate = imported.Contains(FirepitFragments.PrivateFileName, StringComparer.OrdinalIgnoreCase);
 
         if (!inspection.Certain)
         {

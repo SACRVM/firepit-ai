@@ -61,10 +61,16 @@ export function reuseId(window: string): string | null {
   return window.startsWith('reuse:') && window.length > 6 ? window.slice(6) : null
 }
 
+// Keys without case or dashes: the docs write "claude-prompt", the Windows
+// shell wrote "Shell" and "ClaudePrompt", and all of them mean the same.
 const TYPES: Record<string, CommandType> = {
   shell: 'shell',
-  'claude-prompt': 'claude-prompt',
+  claudeprompt: 'claude-prompt',
   url: 'url',
+}
+
+function typeOf(value: unknown): CommandType | undefined {
+  return typeof value === 'string' ? TYPES[value.toLowerCase().replace(/[-_]/g, '')] : undefined
 }
 
 const WINDOWS_PROGRAMS = /^(powershell|pwsh|cmd|explorer|wt)(\.exe)?$/i
@@ -101,7 +107,7 @@ export function readCommands(config: unknown): { id: string | null; commands: Cm
     const c = item as Record<string, unknown>
     if (c.disabled === true) continue
     const name = str(c.name)
-    const type = TYPES[String(c.type)]
+    const type = typeOf(c.type)
     if (name === null || type === undefined) {
       problems.push(`skipped a command without a valid name or type (${JSON.stringify(c.name ?? c.type ?? '?')})`)
       continue
