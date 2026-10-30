@@ -15,8 +15,8 @@ description: "Send messages to other projects through the Firepit inbox and hand
   open and idle may be told at once: depending on the project's setting it
   summarises the message and waits for the user, or handles it.
 - The receiver reads with `firepit_inbox_list`, does the work, and closes the
-  message with `firepit_inbox_complete` (the `id` is the file name). Closing is
-  the acknowledgement; there is no read receipt.
+  message with `firepit_inbox_complete` (the `id` is the file name). Closing
+  only moves the file in the receiver's own inbox: the sender never sees it.
 - Claude Code's own messages between running sessions reach a session at once
   but leave nothing behind. Use them to coordinate with a session the user has
   open right now; use the inbox for anything that must not get lost.
@@ -31,11 +31,14 @@ description: "Send messages to other projects through the Firepit inbox and hand
   migration.
 - **You found a problem in another project.** Report it there instead of
   editing that repository from here; its own session knows its state.
+- **You handled a report or a request that came by message.** Tell the
+  sender it is done: what was fixed or changed, where (commit, version), and
+  what they have to do now, if anything. Closing the message does not reach
+  them, and a project that reported a bug otherwise goes on avoiding it.
 - **The user asks.**
 
-Not worth a message: news nobody has to act on, progress reports, a reply to
-every message. Completing is the reply; answer only when the sender asked a
-question.
+Not worth a message: news nobody has to act on, progress reports, a thank-you
+for a notice you simply followed (a release you re-vendored).
 
 ## Writing one
 
@@ -63,6 +66,9 @@ question.
   exactly that.
 - Close each message with `firepit_inbox_complete` once it is handled, or when
   it turned out obsolete. Say which, in one line to the user.
+- When the message reported a problem or asked for something, answer the
+  sender once it is done (see *When to write*). That answer is your own
+  message about your own work, not a forward.
 - **Never forward a message to other projects.** If another project needs to
   know what you did, write your own message about it. Forwarding is how loops
   start.
