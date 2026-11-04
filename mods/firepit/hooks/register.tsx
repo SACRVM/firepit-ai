@@ -23,7 +23,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.7.2'
+const VERSION = '0.7.3'
 const PANE = 'firepit'
 const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'
@@ -693,8 +693,10 @@ export const register: Register = on => {
     // every surface, and desktop's native buttons are taller than one, so a
     // wrapped row landed on the row above. In the terminal the steps come out
     // as the cells this bar always had (lg 3 across, md 1 down, xs 1 across).
+    // A group wraps inside itself too: one wider than the bar (voxcade's six
+    // Run buttons) otherwise had its buttons squeezed into each other.
     const groupRow = (key: string, label: string | null, items: JSX.Element[]) => (
-      <Box key={key} flexDirection="row" alignItems="center" columnGap="xs">
+      <Box key={key} flexDirection="row" flexWrap="wrap" flexShrink={1} alignItems="center" columnGap="xs" rowGap="md">
         {label !== null && <Text dimColor>{label}</Text>}
         {items}
       </Box>

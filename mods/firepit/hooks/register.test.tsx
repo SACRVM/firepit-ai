@@ -165,7 +165,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on)
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit 0.7.2')
+  expect(before.text).toContain('firepit 0.7.3')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')
@@ -203,6 +203,8 @@ for (const surface of ['desktop', 'terminal'] as const) {
       for (const prop of ['gap', 'columnGap', 'rowGap']) {
         expect(typeof box.props[prop]).not.toBe('number')
       }
+      // A row that cannot wrap squeezes its buttons once it is wider than the bar.
+      if (box.props.flexDirection === 'row') expect(box.props.flexWrap).toBe('wrap')
     }
     await band.unmount()
   })

@@ -60,9 +60,11 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
   loaded the empty seed. The scope now writes the digest of every member,
   on each index pass, when a member joins, and in the integrity check's
   repair.
-- **The bar's wrapped rows no longer overlap on desktop** (plugin 0.7.2). It
-  spaced by text cells, and desktop's buttons are taller than one; it now
-  spaces by step names, which each surface sizes for itself. Group labels are
+- **The bar's wrapped rows no longer overlap on desktop** (plugin 0.7.2,
+  0.7.3). It spaced by text cells, and desktop's buttons are taller than one;
+  it now spaces by step names, which each surface sizes for itself. A group
+  wider than the bar wraps inside itself instead of squeezing its buttons
+  into each other (voxcade's six Run buttons). Group labels are
   dim, the inbox stays the one primary button, *Review commands* is marked
   in the warning color. The terminal keeps its spacing.
 - **`firepit_add_command` no longer wipes a config it cannot read.** A
