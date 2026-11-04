@@ -53,6 +53,18 @@ Versioning follows SemVer; pre-1.0 minor bumps may include breaking changes.
 
 ### Fixed
 
+- **Every project sharing a knowledge base gets its pinned digest.** A
+  project whose `.firepit/knowledge` points at another project's base became
+  an alias of that scope, and only the owner's `knowledge-pinned.md` was
+  ever written. The member's CLAUDE.md imports its own, so its sessions
+  loaded the empty seed. The scope now writes the digest of every member,
+  on each index pass, when a member joins, and in the integrity check's
+  repair.
+- **The bar's wrapped rows no longer overlap on desktop** (plugin 0.7.2). It
+  spaced by text cells, and desktop's buttons are taller than one; it now
+  spaces by step names, which each surface sizes for itself. Group labels are
+  dim, the inbox stays the one primary button, *Review commands* is marked
+  in the warning color. The terminal keeps its spacing.
 - **`firepit_add_command` no longer wipes a config it cannot read.** A
   command of type `claude-prompt` made the whole `.firepit/config.json`
   unreadable to Firepit (the enum knew only `ClaudePrompt`), so

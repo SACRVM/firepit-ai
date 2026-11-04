@@ -23,7 +23,7 @@ import {
 type $ = EngineInterface
 
 /** Shown in the panel and by /fire status, so a stale load is visible. Keep in step with plugin.json. */
-const VERSION = '0.7.1'
+const VERSION = '0.7.2'
 const PANE = 'firepit'
 const VIEWER = 'firepit-viewer'
 const CONFIG = '.firepit/config.json'
@@ -689,30 +689,34 @@ export const register: Register = on => {
       )
     }
 
+    // Spacing by step name, never by cell count: a number is a text cell on
+    // every surface, and desktop's native buttons are taller than one, so a
+    // wrapped row landed on the row above. In the terminal the steps come out
+    // as the cells this bar always had (lg 3 across, md 1 down, xs 1 across).
     const groupRow = (key: string, label: string | null, items: JSX.Element[]) => (
-      <Box key={key} flexDirection="row" columnGap={1}>
-        {label !== null && <Text bold>{label}:</Text>}
+      <Box key={key} flexDirection="row" alignItems="center" columnGap="xs">
+        {label !== null && <Text dimColor>{label}</Text>}
         {items}
       </Box>
     )
 
     return (
-      <Box flexDirection="row" flexWrap="wrap" columnGap={3} rowGap={1}>
+      <Box flexDirection="row" flexWrap="wrap" alignItems="center" columnGap="lg" rowGap="md">
         {messages.length > 0 && (
           <Button key="inbox" variant="primary" onPress={() => fire($, openPane($))}>
-            Inbox {messages.length}
+            Inbox <Text bold>{String(messages.length)}</Text>
           </Button>
         )}
         {cfg !== null && !trusted && commands.some(c => c.type === 'shell') && (
-          <Button key="review" variant="primary" onPress={() => fire($, update($, isReviewing, () => true))}>
-            Review commands
+          <Button key="review" onPress={() => fire($, update($, isReviewing, () => true))}>
+            <Text color="warning">Review commands</Text>
           </Button>
         )}
         {sections(commands.filter(c => c.inBar)).map(section =>
           groupRow(`group-${slug(section.group ?? section.items[0].key)}`, section.group, section.items.map(button)),
         )}
         {/* Files, terminal and the inbox live in the panel; the bar only leads there. */}
-        <Button key="panel" dimColor onPress={() => fire($, openPane($))}>panel</Button>
+        <Button key="panel" dimColor onPress={() => fire($, openPane($))}>Panel</Button>
       </Box>
     )
   })

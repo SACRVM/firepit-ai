@@ -165,7 +165,7 @@ test('/fire trust lists what it trusts; /fire status shows the loaded version', 
   world(on)
   await $.command.run({ command: 'fire', args: 'reload' })
   const before = await $.command.run({ command: 'fire', args: 'status' })
-  expect(before.text).toContain('firepit 0.7.1')
+  expect(before.text).toContain('firepit 0.7.2')
   expect(before.text).toContain('trusted: no')
   const trusted = await $.command.run({ command: 'fire', args: 'trust' })
   expect(trusted.text).toContain('Trusted 3 shell commands:')
@@ -190,6 +190,23 @@ test('an inline command answers in the chat, and Claude gets the output too', as
 })
 
 for (const surface of ['desktop', 'terminal'] as const) {
+  test(`${surface}: the bar spaces its rows by step name, so wrapped rows clear desktop's taller buttons`, async ($, on) => {
+    const w = world(on)
+    w.files.set(`${INBOX}/${OLD_MESSAGE}`, messageFile('alpha', 'Old news'))
+    await $.session.start({ cwd: ROOT, surface, isInteractive: true })
+
+    const band = await $.ui.mount({ plugin: 'firepit', surface, ...BAND })
+    expect(await band.find({ key: 'group-run' })).toBeDefined()
+    const boxes = await band.findAll({ type: 'Box' })
+    expect(boxes.length).toBeGreaterThan(1)
+    for (const box of boxes) {
+      for (const prop of ['gap', 'columnGap', 'rowGap']) {
+        expect(typeof box.props[prop]).not.toBe('number')
+      }
+    }
+    await band.unmount()
+  })
+
   test(`${surface}: the inbox shows in the bar and the panel; done goes through Firepit`, async ($, on) => {
     const w = world(on)
     w.files.set(`${INBOX}/${OLD_MESSAGE}`, messageFile('alpha', 'Old news'))
