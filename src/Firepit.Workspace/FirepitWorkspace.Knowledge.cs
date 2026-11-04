@@ -82,6 +82,7 @@ public sealed partial class FirepitWorkspace
             var byDocsDir = new Dictionary<string, string>(PlatformText.PathComparer);
             var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var memberDigests = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             // The base every project reads. It lives at the root of the meta
             // repo, not in its .firepit/ — what the administration holds about
@@ -199,9 +200,19 @@ public sealed partial class FirepitWorkspace
                 // Several projects pointing at one directory are one knowledge
                 // base, not N. Registering each separately would have that many
                 // watchers and indexers fighting over the same files.
+                // The member still gets a digest of its own: its CLAUDE.md
+                // imports .firepit/knowledge-pinned.md like any other
+                // project's, and an alias alone would leave that file at the
+                // seed forever.
                 if (byDocsDir.TryGetValue(resolution.DocsDir, out var owner))
                 {
                     aliases[projectScope] = owner;
+                    if (!memberDigests.TryGetValue(owner, out var digests))
+                    {
+                        memberDigests[owner] = digests = [];
+                    }
+
+                    digests.Add(KnowledgeStoreLocation.For(project.Path, resolution.DocsDir).DigestPath);
                     Log.Information(
                         "Knowledge scope {Scope} shares the base '{Owner}'", projectScope, owner);
                     continue;
@@ -275,7 +286,11 @@ public sealed partial class FirepitWorkspace
             _brokenKnowledgeScopes = broken;
             _redirectedKnowledgeScopes = redirected;
             _knowledgeScopeAliases = aliases;
-            svc.SyncScopes(registrations);
+            svc.SyncScopes(registrations
+                .Select(r => memberDigests.TryGetValue(r.Name, out var digests)
+                    ? r with { MemberDigestPaths = digests }
+                    : r)
+                .ToList());
         }
         catch (Exception ex)
         {

@@ -160,4 +160,52 @@ public sealed class KnowledgeRefreshTests : IDisposable
         Assert.True(await Eventually(() => ScopeSees("shared", "Shared")));
         Assert.Single(_service.ScopeNames);
     }
+
+    [Fact]
+    public async Task EveryMemberOfASharedBase_GetsThePinnedDigest()
+    {
+        // A member has no scope of its own, but its CLAUDE.md imports its own
+        // .firepit/knowledge-pinned.md. Only the owner's used to be written, so
+        // every other member silently loaded the empty seed.
+        var member = Path.Combine(_root, "member");
+        var memberDigest = Path.Combine(member, ".firepit", "knowledge-pinned.md");
+        Directory.CreateDirectory(Path.Combine(member, ".firepit"));
+        await File.WriteAllTextAsync(
+            Path.Combine(_elsewhere, "rule.md"), "---\npin: true\n---\n# Rule\n\nAlways on.\n");
+
+        _service.SyncScopes(
+        [
+            new KnowledgeScopeRegistration(
+                "shared", _project, KnowledgeStoreLocation.For(_project, _elsewhere),
+                [memberDigest]),
+        ]);
+        await _service.WaitForPendingWorkAsync();
+
+        Assert.True(await Eventually(() => Task.FromResult(
+            File.Exists(memberDigest) && File.ReadAllText(memberDigest).Contains("Always on."))));
+        Assert.Equal(
+            File.ReadAllText(Path.Combine(_project, ".firepit", "knowledge-pinned.md")),
+            File.ReadAllText(memberDigest));
+    }
+
+    [Fact]
+    public async Task AMemberJoiningLater_GetsItsDigestWithoutADocumentChange()
+    {
+        // The base is already registered and indexed; the new member arrives
+        // with the next project-list sync. Nothing in the documents changes,
+        // so waiting for the next index pass would leave it at the seed.
+        await File.WriteAllTextAsync(
+            Path.Combine(_elsewhere, "rule.md"), "---\npin: true\n---\n# Rule\n\nAlways on.\n");
+        var location = KnowledgeStoreLocation.For(_project, _elsewhere);
+        _service.SyncScopes([new KnowledgeScopeRegistration("shared", _project, location)]);
+        await _service.WaitForPendingWorkAsync();
+
+        var member = Path.Combine(_root, "member");
+        var memberDigest = Path.Combine(member, ".firepit", "knowledge-pinned.md");
+        Directory.CreateDirectory(Path.Combine(member, ".firepit"));
+        _service.SyncScopes([new KnowledgeScopeRegistration("shared", _project, location, [memberDigest])]);
+
+        Assert.True(await Eventually(() => Task.FromResult(
+            File.Exists(memberDigest) && File.ReadAllText(memberDigest).Contains("Always on."))));
+    }
 }

@@ -15,8 +15,16 @@ namespace Firepit.Knowledge;
 /// docs into another project's store, which is how a public repo keeps
 /// research out of its own history.
 /// </param>
+/// <param name="MemberDigestPaths">
+/// The <c>knowledge-pinned.md</c> of every other project that shares this
+/// base through a pointer. Those projects get no scope of their own, but their
+/// CLAUDE.md still imports their own digest, so the scope keeps it current.
+/// </param>
 public sealed record KnowledgeScopeRegistration(
-    string Name, string ProjectPath, KnowledgeStoreLocation? Store = null);
+    string Name,
+    string ProjectPath,
+    KnowledgeStoreLocation? Store = null,
+    IReadOnlyList<string>? MemberDigestPaths = null);
 
 /// <summary>
 /// Whether a scope's index can be trusted to stand in for its documents.
@@ -285,7 +293,7 @@ public sealed class KnowledgeService : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(registrations);
 
-        var added = new List<Scope>();
+        var toIndex = new List<Scope>();
         lock (_scopesGate)
         {
             var wanted = new Dictionary<string, KnowledgeScopeRegistration>(StringComparer.OrdinalIgnoreCase);
@@ -321,6 +329,15 @@ public sealed class KnowledgeService : IDisposable
                             TryAttachWatcher(existing);
                         }
 
+                        // A project that just started sharing the base needs
+                        // its digest now, not at the next document change.
+                        var members = NormalizeDigestPaths(reg.MemberDigestPaths);
+                        if (!members.SequenceEqual(existing.MemberDigestPaths, PathText.Comparer))
+                        {
+                            existing.MemberDigestPaths = members;
+                            toIndex.Add(existing);
+                        }
+
                         continue;
                     }
 
@@ -330,15 +347,24 @@ public sealed class KnowledgeService : IDisposable
 
                 var scope = CreateScope(reg);
                 _scopes[name] = scope;
-                added.Add(scope);
+                toIndex.Add(scope);
             }
         }
 
-        foreach (var scope in added)
+        foreach (var scope in toIndex)
         {
             ScheduleReindex(scope);
         }
     }
+
+    private static IReadOnlyList<string> NormalizeDigestPaths(IReadOnlyList<string>? paths) =>
+        paths is null
+            ? []
+            : paths
+                .Select(Path.GetFullPath)
+                .Distinct(PathText.Comparer)
+                .Order(PathText.Comparer)
+                .ToList();
 
     /// <summary>
     /// Hybrid search across the given scopes (all registered scopes when
@@ -604,6 +630,17 @@ public sealed class KnowledgeService : IDisposable
         if (repair && PinnedDigest.Regenerate(docsDir, scope.DigestPath))
         {
             repairs.Add("regenerated knowledge-pinned.md");
+        }
+
+        if (repair)
+        {
+            foreach (var member in scope.MemberDigestPaths)
+            {
+                if (PinnedDigest.Regenerate(docsDir, member))
+                {
+                    repairs.Add($"regenerated {member}");
+                }
+            }
         }
 
         return new ScopeIntegrity(
@@ -894,6 +931,7 @@ public sealed class KnowledgeService : IDisposable
             Name = reg.Name,
             ProjectPath = projectPath,
             DigestPath = location.DigestPath,
+            MemberDigestPaths = NormalizeDigestPaths(reg.MemberDigestPaths),
             Store = store,
             Indexer = new KnowledgeIndexer(
                 store, _embeddings, _loggerFactory.CreateLogger<KnowledgeIndexer>()),
@@ -1070,6 +1108,16 @@ public sealed class KnowledgeService : IDisposable
             {
                 _logger.LogInformation(
                     "Knowledge scope {Scope}: pinned digest updated", scope.Name);
+            }
+
+            // Every project sharing the base imports a digest of its own.
+            foreach (var member in scope.MemberDigestPaths)
+            {
+                if (PinnedDigest.Regenerate(scope.Store.KnowledgeDir, member))
+                {
+                    _logger.LogInformation(
+                        "Knowledge scope {Scope}: pinned digest updated at {Path}", scope.Name, member);
+                }
             }
 
             // A documents directory that is simply not there yet is the normal
@@ -1283,6 +1331,10 @@ public sealed class KnowledgeService : IDisposable
         /// derivable from the docs dir — the docs may live in another project's
         /// store, but the digest belongs to this project's CLAUDE.md.</summary>
         public required string DigestPath { get; init; }
+
+        /// <summary>The digests of the projects sharing this base. Replaced by
+        /// SyncScopes when a member joins or leaves; read by index passes.</summary>
+        public volatile IReadOnlyList<string> MemberDigestPaths = [];
 
         public required KnowledgeStore Store { get; init; }
         public required KnowledgeIndexer Indexer { get; init; }
